@@ -21,7 +21,7 @@
  * Progress persistence: Adaptive tables app saves current table progress in localStorage
  */
 
-import { useEffect, useState, useRef, useMemo, Fragment } from 'react'
+import { useEffect, useState, useRef, useMemo, Fragment, useCallback } from 'react'
 import './App.css'
 
 // API base URL from environment variables (Vite)
@@ -49575,6 +49575,53 @@ function GeometryApp({ onBack }) {
   const [rays, setRays] = useState([])
   const [selectedPoints, setSelectedPoints] = useState([])
   const [activeTool, setActiveTool] = useState('point')
+  const [history, setHistory] = useState([])
+
+  const distanceToSegment = (x, y, x1, y1, x2, y2) => {
+    const A = x - x1
+    const B = y - y1
+    const C = x2 - x1
+    const D = y2 - y1
+
+    const dot = A * C + B * D
+    const lenSq = C * C + D * D
+    let param = -1
+    if (lenSq !== 0) param = dot / lenSq
+
+    let xx, yy
+    if (param < 0) {
+      xx = x1
+      yy = y1
+    } else if (param > 1) {
+      xx = x2
+      yy = y2
+    } else {
+      xx = x1 + param * C
+      yy = y1 + param * D
+    }
+
+    const dx = x - xx
+    const dy = y - yy
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  const distanceToLine = (x, y, x1, y1, x2, y2) => {
+    const num = Math.abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
+    const den = Math.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
+    return den === 0 ? Math.sqrt((x - x1) ** 2 + (y - y1) ** 2) : num / den
+  }
+
+  const distanceToRay = (x, y, x1, y1, x2, y2) => {
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const lenSq = dx * dx + dy * dy
+    if (lenSq === 0) return Math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
+    const t = ((x - x1) * dx + (y - y1) * dy) / lenSq
+    if (t < 0) return Math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
+    const px = x1 + t * dx
+    const py = y1 + t * dy
+    return Math.sqrt((x - px) ** 2 + (y - py) ** 2)
+  }
 
   const chapters = geometryData.chapters
   const currentChapter = chapters.find(ch => ch.chapter_id === currentChapterId) || chapters[0]
@@ -49614,6 +49661,7 @@ function GeometryApp({ onBack }) {
     setLines([])
     setRays([])
     setSelectedPoints([])
+    setHistory([])
     setValidationFeedback({ status: null, message: '' })
     setSelectedOption(null)
     setShowHint(false)
@@ -49646,13 +49694,98 @@ function GeometryApp({ onBack }) {
     const x = Math.max(0, Math.min(500, snapX))
     const y = Math.max(0, Math.min(300, snapY))
     
-    const existingPoint = points.find(p => p.x === x && p.y === y)
+    const existingPoint = points.find(p => Math.hypot(p.x - rawX, p.y - rawY) < 15)
     
+    if (activeTool === 'eraser') {
+      if (existingPoint) {
+        if (existingPoint.isPreplaced) return // Don't delete preplaced points
+        
+        // Find connections to delete
+        const connectedSegments = segments.filter(s => s.p1Id === existingPoint.id || s.p2Id === existingPoint.id)
+        const connectedLines = lines.filter(l => l.p1Id === existingPoint.id || l.p2Id === existingPoint.id)
+        const connectedRays = rays.filter(r => r.p1Id === existingPoint.id || r.p2Id === existingPoint.id)
+
+        setPoints(prev => prev.filter(p => p.id !== existingPoint.id))
+        setSegments(prev => prev.filter(s => s.p1Id !== existingPoint.id && s.p2Id !== existingPoint.id))
+        setLines(prev => prev.filter(l => l.p1Id !== existingPoint.id && l.p2Id !== existingPoint.id))
+        setRays(prev => prev.filter(r => r.p1Id !== existingPoint.id && r.p2Id !== existingPoint.id))
+        setSelectedPoints([])
+
+        setHistory(prev => [...prev, {
+          type: 'delete-elements',
+          points: [existingPoint],
+          segments: connectedSegments,
+          lines: connectedLines,
+          rays: connectedRays
+        }])
+      } else {
+        // Check if clicked close to a segment
+        const clickedSegment = segments.find(s => {
+          const p1 = points.find(p => p.id === s.p1Id)
+          const p2 = points.find(p => p.id === s.p2Id)
+          if (!p1 || !p2) return false
+          return distanceToSegment(rawX, rawY, p1.x, p1.y, p2.x, p2.y) < 10
+        })
+        if (clickedSegment) {
+          setSegments(prev => prev.filter(s => s.id !== clickedSegment.id))
+          setHistory(prev => [...prev, {
+            type: 'delete-elements',
+            points: [],
+            segments: [clickedSegment],
+            lines: [],
+            rays: []
+          }])
+          return
+        }
+
+        // Check if clicked close to a line
+        const clickedLine = lines.find(l => {
+          const p1 = points.find(p => p.id === l.p1Id)
+          const p2 = points.find(p => p.id === l.p2Id)
+          if (!p1 || !p2) return false
+          return distanceToLine(rawX, rawY, p1.x, p1.y, p2.x, p2.y) < 10
+        })
+        if (clickedLine) {
+          setLines(prev => prev.filter(l => l.id !== clickedLine.id))
+          setHistory(prev => [...prev, {
+            type: 'delete-elements',
+            points: [],
+            segments: [],
+            lines: [clickedLine],
+            rays: []
+          }])
+          return
+        }
+
+        // Check if clicked close to a ray
+        const clickedRay = rays.find(r => {
+          const p1 = points.find(p => p.id === r.p1Id)
+          const p2 = points.find(p => p.id === r.p2Id)
+          if (!p1 || !p2) return false
+          return distanceToRay(rawX, rawY, p1.x, p1.y, p2.x, p2.y) < 10
+        })
+        if (clickedRay) {
+          setRays(prev => prev.filter(ry => ry.id !== clickedRay.id))
+          setHistory(prev => [...prev, {
+            type: 'delete-elements',
+            points: [],
+            segments: [],
+            lines: [],
+            rays: [clickedRay]
+          }])
+          return
+        }
+      }
+      return
+    }
+
     if (activeTool === 'point') {
       if (!existingPoint) {
         if (points.length >= 26) return // limit to A-Z
         const newLabel = String.fromCharCode(65 + points.length)
-        setPoints([...points, { id: newLabel, x, y }])
+        const newPt = { id: newLabel, x, y }
+        setPoints([...points, newPt])
+        setHistory(prev => [...prev, { type: 'add-point', point: newPt }])
       }
     } else {
       // Connect tools (line, segment, ray)
@@ -49664,6 +49797,7 @@ function GeometryApp({ onBack }) {
         const newLabel = String.fromCharCode(65 + points.length)
         const newPt = { id: newLabel, x, y }
         setPoints(prev => [...prev, newPt])
+        setHistory(prev => [...prev, { type: 'add-point', point: newPt }])
         handlePointSelection(newLabel)
       }
     }
@@ -49686,15 +49820,21 @@ function GeometryApp({ onBack }) {
       
       if (activeTool === 'segment') {
         if (!segments.some(s => (s.p1Id === p1Id && s.p2Id === p2Id) || (s.p1Id === p2Id && s.p2Id === p1Id))) {
-          setSegments([...segments, { id: newId, p1Id, p2Id }])
+          const newSeg = { id: newId, p1Id, p2Id }
+          setSegments([...segments, newSeg])
+          setHistory(prev => [...prev, { type: 'add-segment', segment: newSeg }])
         }
       } else if (activeTool === 'line') {
         if (!lines.some(l => (l.p1Id === p1Id && l.p2Id === p2Id) || (l.p1Id === p2Id && l.p2Id === p1Id))) {
-          setLines([...lines, { id: newId, p1Id, p2Id }])
+          const newLn = { id: newId, p1Id, p2Id }
+          setLines([...lines, newLn])
+          setHistory(prev => [...prev, { type: 'add-line', line: newLn }])
         }
       } else if (activeTool === 'ray') {
         if (!rays.some(r => r.p1Id === p1Id && r.p2Id === p2Id)) {
-          setRays([...rays, { id: newId, p1Id, p2Id }])
+          const newRy = { id: newId, p1Id, p2Id }
+          setRays([...rays, newRy])
+          setHistory(prev => [...prev, { type: 'add-ray', ray: newRy }])
         }
       }
       setSelectedPoints([])
@@ -49734,6 +49874,78 @@ function GeometryApp({ onBack }) {
       y2: p2.y + uy * 1000
     }
   }
+
+  const handleUndo = useCallback(() => {
+    if (history.length === 0) return
+    const lastAction = history[history.length - 1]
+    setHistory(prev => prev.slice(0, -1))
+
+    if (lastAction.type === 'add-point') {
+      setPoints(prev => prev.filter(p => p.id !== lastAction.point.id))
+    } else if (lastAction.type === 'add-segment') {
+      setSegments(prev => prev.filter(s => s.id !== lastAction.segment.id))
+    } else if (lastAction.type === 'add-line') {
+      setLines(prev => prev.filter(l => l.id !== lastAction.line.id))
+    } else if (lastAction.type === 'add-ray') {
+      setRays(prev => prev.filter(r => r.id !== lastAction.ray.id))
+    } else if (lastAction.type === 'delete-elements') {
+      if (lastAction.points && lastAction.points.length > 0) {
+        setPoints(prev => [...prev, ...lastAction.points])
+      }
+      if (lastAction.segments && lastAction.segments.length > 0) {
+        setSegments(prev => [...prev, ...lastAction.segments])
+      }
+      if (lastAction.lines && lastAction.lines.length > 0) {
+        setLines(prev => [...prev, ...lastAction.lines])
+      }
+      if (lastAction.rays && lastAction.rays.length > 0) {
+        setRays(prev => [...prev, ...lastAction.rays])
+      }
+    }
+  }, [history])
+
+  // Keyboard shortcuts listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        handleUndo()
+        return
+      }
+
+      if (!currentActivity || !currentActivity.allowed_tools) return
+      const allowed = currentActivity.allowed_tools
+
+      if (e.key === '1' && allowed.includes('point')) {
+        setActiveTool('point')
+        setSelectedPoints([])
+      } else if (e.key === '2' && allowed.includes('segment')) {
+        setActiveTool('segment')
+        setSelectedPoints([])
+      } else if (e.key === '3' && allowed.includes('line')) {
+        setActiveTool('line')
+        setSelectedPoints([])
+      } else if (e.key === '4' && allowed.includes('ray')) {
+        setActiveTool('ray')
+        setSelectedPoints([])
+      } else if (e.key === '5' && allowed.includes('eraser')) {
+        setActiveTool('eraser')
+        setSelectedPoints([])
+      } else if (e.key.toLowerCase() === 'e' && allowed.includes('eraser')) {
+        setActiveTool('eraser')
+        setSelectedPoints([])
+      } else if (e.key === 'Escape') {
+        setSelectedPoints([])
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentActivity, history, selectedPoints, handleUndo])
 
   // Particle physics update loop
   useEffect(() => {
@@ -50369,6 +50581,7 @@ function GeometryApp({ onBack }) {
               else if (tool === 'ray') { icon = '➡️'; label = 'Ray' }
               else if (tool === 'measure-length') { icon = '📏'; label = 'Ruler' }
               else if (tool === 'measure-angle') { icon = '📐'; label = 'Protractor' }
+              else if (tool === 'eraser') { icon = '🧽'; label = 'Eraser' }
               
               return (
                 <button
@@ -50399,6 +50612,29 @@ function GeometryApp({ onBack }) {
             
             <button
               type="button"
+              disabled={history.length === 0}
+              onClick={handleUndo}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '4px',
+                border: '1px solid var(--clr-border)',
+                background: 'transparent',
+                color: history.length === 0 ? 'var(--clr-text-soft, #555)' : 'var(--clr-text)',
+                cursor: history.length === 0 ? 'not-allowed' : 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                marginLeft: 'auto',
+                opacity: history.length === 0 ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              ↩️ Undo
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 let initialPoints = []
                 if (currentActivity) {
@@ -50419,6 +50655,7 @@ function GeometryApp({ onBack }) {
                 setLines([])
                 setRays([])
                 setSelectedPoints([])
+                setHistory([])
                 setValidationFeedback({ status: null, message: '' })
               }}
               style={{
@@ -50430,7 +50667,7 @@ function GeometryApp({ onBack }) {
                 cursor: 'pointer',
                 fontSize: '0.85rem',
                 fontWeight: 'bold',
-                marginLeft: 'auto'
+                marginLeft: '0.5rem'
               }}
             >
               🧹 Clear Canvas
