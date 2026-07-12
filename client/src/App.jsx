@@ -249,21 +249,11 @@ function AuthGate({ children }) {
   )
 }
 
-// Inject version badge into DOM once (appears on all routes)
-;(() => {
-  if (typeof document !== 'undefined' && !document.getElementById('tenali-version')) {
-    const el = document.createElement('div')
-    el.id = 'tenali-version'
-    Object.assign(el.style, {
-      position: 'fixed', top: '8px', right: '12px', zIndex: '9999',
-      fontSize: '0.65rem', opacity: '0.55', pointerEvents: 'none',
-      textAlign: 'right', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif',
-      color: 'var(--clr-text-soft)',
-    })
-    el.innerHTML = `<div>v${TENALI_VERSION}</div><div>${TENALI_BUILD_DATE}</div>`
-    document.body.appendChild(el)
-  }
-})()
+// Version badge removed. Clean up if existing.
+if (typeof document !== 'undefined') {
+  const el = document.getElementById('tenali-version')
+  if (el) el.remove()
+}
 
 // Default number of questions for quizzes
 const DEFAULT_TOTAL = 20
@@ -36092,12 +36082,11 @@ function App() {
  * @param {Function} props.onSelect - Callback when user selects a quiz: receives mode key (e.g., 'gk')
  */
 function Home({ onSelect }) {
-  // Special featured apps (shown in highlighted first row)
+  // Special featured apps (shown in highlighted first row & three-line menu)
   const featuredApps = [
     { key: 'randommix', name: 'Random Mix', subtitle: 'Adaptive cross-topic quiz', color: 'featured' },
     { key: 'custom', name: 'Custom Lesson', subtitle: 'Build your own mixed quiz', color: 'featured' },
-    { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' },
-    { key: 'geocraft', name: 'GeoCraft', subtitle: 'Geometry Game', color: 'featured' }
+    { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' }
   ]
 
   // All regular quiz apps sorted alphabetically by name
@@ -36121,6 +36110,7 @@ function Home({ onSelect }) {
     { key: 'dotprod', name: 'Dot Products', subtitle: 'Vectors, matrices, fill blanks', color: 'blue' },
     { key: 'fractionadd', name: 'Fractions', subtitle: 'Add, subtract, multiply & divide', color: 'green' },
     { key: 'funceval', name: 'Functions', subtitle: 'Evaluate f(x), f(x,y), f(x,y,z)', color: 'green' },
+    { key: 'geocraft', name: 'GeoCraft', subtitle: 'Geometry Game', color: 'featured' },
     { key: 'gk', name: 'GK', subtitle: 'General Knowledge questions', color: 'purple' },
     { key: 'gst', name: 'GST', subtitle: 'Goods & Services Tax', color: 'purple' },
     { key: 'hcflcm', name: 'HCF & LCM', subtitle: 'Highest common factor & LCM', color: 'blue' },
@@ -36182,30 +36172,28 @@ function Home({ onSelect }) {
     { key: 'polygym', name: 'Polynomials Gym', subtitle: 'Arithmetic → monomial algebra (MCQ)', color: 'blue' },
   ]
 
-  // Combined list for search filtering
-  const allApps = [...featuredApps, ...regularApps]
+  // Search term for filtering apps
+  const [search, setSearch] = useState('')
 
-  // Hamburger menu open state
+  // Hamburger menu dropdown state
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
 
-  // Close menu when clicking outside
+  // Handle click outside to close hamburger menu
   useEffect(() => {
-    if (!menuOpen) return
-    const handleClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [menuOpen])
-
-  // Search term for filtering apps
-  const [search, setSearch] = useState('')
+    const handleOutsideClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [])
 
   // Filtered lists
   const isSearching = search.trim() !== ''
   const matchFilter = (a) => a.name.toLowerCase().includes(search.toLowerCase()) || a.subtitle.toLowerCase().includes(search.toLowerCase())
-  const filteredFeatured = isSearching ? featuredApps.filter(matchFilter) : featuredApps
-  const filteredRegular = isSearching ? regularApps.filter(matchFilter) : regularApps
-  const apps = isSearching ? allApps.filter(matchFilter) : allApps
+  const apps = isSearching ? regularApps.filter(matchFilter) : regularApps
 
   // Grid layout tracking (for responsive display)
   const gridRef = useRef(null)
@@ -36278,7 +36266,7 @@ function Home({ onSelect }) {
         />
       </div>
       <div className="menu-grid" ref={gridRef}>
-        {filteredRegular.map((app) => (
+        {apps.map((app) => (
           <button key={app.key} className={`menu-card ${app.color}`} onClick={() => onSelect(app.key)}>
             <span className="menu-title">{app.name}</span>
             <span className="menu-subtitle">{app.subtitle}</span>
