@@ -49671,8 +49671,8 @@ function GeometryApp({ onBack }) {
     const rawX = e.clientX - rect.left
     const rawY = e.clientY - rect.top
     
-    // Snap to grid (grid spacing 20px)
-    const gridSpacing = 20
+    // Snap to grid (grid spacing 10px)
+    const gridSpacing = 10
     const snapX = Math.round(rawX / gridSpacing) * gridSpacing
     const snapY = Math.round(rawY / gridSpacing) * gridSpacing
     
@@ -49805,253 +49805,337 @@ function GeometryApp({ onBack }) {
   const handleCheckDrawing = () => {
     const actId = currentActivity.activity_id
     let feedback = { status: 'error', message: 'Invalid activity validation.' }
+
+    // Closed loop helper for polygons
+    const sideCount = segments.length
+    const ptIds = Array.from(new Set(segments.flatMap(s => [s.p1Id, s.p2Id])))
+    const degMap = {}
+    segments.forEach(s => {
+      degMap[s.p1Id] = (degMap[s.p1Id] || 0) + 1
+      degMap[s.p2Id] = (degMap[s.p2Id] || 0) + 1
+    })
+    const isClosed = sideCount > 2 && ptIds.length === sideCount && Object.values(degMap).every(d => d === 2)
     
     if (actId === 'act_1_1') {
-      const pt = points.find(p => Math.hypot(p.x - 250, p.y - 150) < 5)
-      if (!pt) {
-        feedback = { status: 'error', message: 'No point is close enough to the center of the target (250, 150).' }
+      if (points.length !== 1) {
+        feedback = { status: 'error', message: 'We need exactly one point placed on the target center.' }
       } else {
-        feedback = { status: 'success', message: 'Perfect hit! You placed a point right on the target center!' }
+        const pt = points[0]
+        if (Math.hypot(pt.x - 250, pt.y - 150) >= 5) {
+          feedback = { status: 'error', message: 'Make sure your point is close to the center of the target screen.' }
+        } else {
+          feedback = { status: 'success', message: 'Perfect hit! You placed a point right on the target center!' }
+        }
       }
     } else if (actId === 'act_1_2') {
-      const pt = points.find(p => p.id !== 'A' && p.id !== 'B' && Math.hypot(p.x - 250, p.y - 150) < 5)
-      if (!pt) {
-        feedback = { status: 'error', message: 'No point found at the midpoint of A and B (250, 150).' }
+      if (points.length !== 3) {
+        feedback = { status: 'error', message: 'We need exactly three points on the screen to form corners.' }
       } else {
-        feedback = { status: 'success', message: 'Awesome job! You found the midpoint!' }
+        const [p1, p2, p3] = points
+        const crossProduct = Math.abs(p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y))
+        if (crossProduct < 80) {
+          feedback = { status: 'error', message: 'Your points are in a straight line. Move them around so they form a triangle shape.' }
+        } else {
+          feedback = { status: 'success', message: 'Great job! Three non-collinear points form the corners of a triangle!' }
+        }
       }
     } else if (actId === 'act_2_1') {
-      const l = lines.find(line => {
-        const p1 = points.find(p => p.id === line.p1Id)
-        const p2 = points.find(p => p.id === line.p2Id)
-        if (!p1 || !p2) return false
-        return (Math.hypot(p1.x - 150, p1.y - 200) < 6 && Math.hypot(p2.x - 350, p2.y - 100) < 6) ||
-               (Math.hypot(p1.x - 350, p1.y - 100) < 6 && Math.hypot(p2.x - 150, p2.y - 200) < 6)
-      })
-      if (!l) {
-        feedback = { status: 'error', message: 'Draw an infinite line passing through the points close to (150, 200) and (350, 100).' }
+      if (points.length < 2) {
+        feedback = { status: 'error', message: 'Please place at least two points on the canvas.' }
+      } else if (lines.length !== 1) {
+        feedback = { status: 'error', message: 'We need exactly one line drawn through two points.' }
       } else {
-        feedback = { status: 'success', message: 'Brilliant! You drew a line that extends to infinity in both directions!' }
+        const l = lines[0]
+        const p1 = getPt(l.p1Id)
+        const p2 = getPt(l.p2Id)
+        if (!p1 || !p2) {
+          feedback = { status: 'error', message: 'Make sure your line goes straight through both points.' }
+        } else {
+          feedback = { status: 'success', message: 'Excellent! An endless line passes through both points.' }
+        }
+      }
+    } else if (actId === 'act_2_2') {
+      if (lines.length !== 2) {
+        feedback = { status: 'error', message: 'Please draw exactly two lines on the canvas.' }
+      } else {
+        const l1 = lines[0], l2 = lines[1]
+        const p1a = getPt(l1.p1Id), p1b = getPt(l1.p2Id)
+        const p2a = getPt(l2.p1Id), p2b = getPt(l2.p2Id)
+        if (!p1a || !p1b || !p2a || !p2b || p1a.id === p1b.id || p2a.id === p2b.id) {
+          feedback = { status: 'error', message: 'Both lines must be valid and pass through two distinct points.' }
+        } else {
+          const dx1 = p1b.x - p1a.x, dy1 = p1b.y - p1a.y
+          const dx2 = p2b.x - p2a.x, dy2 = p2b.y - p2a.y
+          const cross = Math.abs(dy1 * dx2 - dy2 * dx1)
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          if (cross / lenProduct > 0.05) {
+            feedback = { status: 'error', message: 'The two lines must run in the exact same direction and have the same slope so they never intersect.' }
+          } else {
+            feedback = { status: 'success', message: 'Brilliant! Those two lines are parallel and will never meet!' }
+          }
+        }
       }
     } else if (actId === 'act_3_1') {
       const seg = segments.find(s => (s.p1Id === 'A' && s.p2Id === 'B') || (s.p1Id === 'B' && s.p2Id === 'A'))
       if (!seg) {
-        feedback = { status: 'error', message: 'Please draw a line segment connecting Point A and Point B.' }
+        feedback = { status: 'error', message: 'Draw exactly one segment directly between the green and red points.' }
       } else {
-        feedback = { status: 'success', message: 'Great connection! You bridged the islands!' }
+        feedback = { status: 'success', message: 'Awesome bridge! The islands are now connected!' }
       }
     } else if (actId === 'act_3_2') {
-      const hub = points.find(p => p.id !== 'A' && p.id !== 'B' && Math.hypot(p.x - 250, p.y - 150) < 6)
-      if (!hub) {
-        feedback = { status: 'error', message: 'Place a central hub point at coordinates (250, 150).' }
+      if (segments.length !== 1) {
+        feedback = { status: 'error', message: 'Draw exactly one line segment.' }
       } else {
-        const segA = segments.some(s => (s.p1Id === hub.id && s.p2Id === 'A') || (s.p1Id === 'A' && s.p2Id === hub.id))
-        const segB = segments.some(s => (s.p1Id === hub.id && s.p2Id === 'B') || (s.p1Id === 'B' && s.p2Id === hub.id))
-        if (!segA || !segB) {
-          feedback = { status: 'error', message: 'Draw two segments: one from the hub to Point A, and one from the hub to Point B.' }
-        } else if (selectedOption !== currentActivity.correct_answer) {
-          feedback = { status: 'error', message: 'Please select the correct answer for the question below.' }
+        const s = segments[0]
+        const p1 = getPt(s.p1Id), p2 = getPt(s.p2Id)
+        if (!p1 || !p2) {
+          feedback = { status: 'error', message: 'Draw a valid segment connecting two points.' }
         } else {
-          feedback = { status: 'success', message: 'Excellent! The total length is indeed 11.0 units.' }
+          const dx = Math.abs(p1.x - p2.x)
+          const dy = Math.abs(p1.y - p2.y)
+          if (dy > 2) {
+            feedback = { status: 'error', message: 'Your segment must be perfectly horizontal (flat).' }
+          } else if (Math.abs(dx - 80) > 4) {
+            feedback = { status: 'error', message: 'Your segment length is incorrect. Measure it with the ruler to make it exactly 4 units (80 pixels).' }
+          } else {
+            feedback = { status: 'success', message: 'Perfect! You drew a horizontal segment exactly 4 units long.' }
+          }
         }
       }
     } else if (actId === 'act_4_1') {
       const ray = rays.find(r => r.p1Id === 'A' && r.p2Id === 'B')
       if (!ray) {
-        feedback = { status: 'error', message: 'Draw a ray starting at A and passing through B.' }
+        feedback = { status: 'error', message: 'Make sure the ray starts at the green point and points directly through the orange point.' }
       } else {
-        feedback = { status: 'success', message: 'Splendid! You drew a ray pointing towards the east!' }
+        feedback = { status: 'success', message: 'Excellent! The ray shines straight through the target!' }
       }
-    } else if (actId === 'act_5_1') {
-      const pV = points.find(p => Math.hypot(p.x - 200, p.y - 200) < 6)
-      const pA = points.find(p => Math.hypot(p.x - 200, p.y - 100) < 6)
-      const pB = points.find(p => Math.hypot(p.x - 300, p.y - 200) < 6)
-      if (!pV || !pA || !pB) {
-        feedback = { status: 'error', message: 'Place three points at (200, 200), (200, 100), and (300, 200).' }
+    } else if (actId === 'act_4_2') {
+      if (rays.length !== 2) {
+        feedback = { status: 'error', message: 'We need exactly two rays on the screen.' }
       } else {
-        const seg1 = segments.some(s => (s.p1Id === pV.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pV.id))
-        const seg2 = segments.some(s => (s.p1Id === pV.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pV.id))
-        if (!seg1 || !seg2) {
-          feedback = { status: 'error', message: 'Draw two segments to form the corner: V to A, and V to B.' }
+        const r1 = rays[0], r2 = rays[1]
+        if (r1.p1Id !== r2.p1Id) {
+          feedback = { status: 'error', message: 'Both rays must start from the exact same point in the middle.' }
         } else {
-          feedback = { status: 'success', message: 'Superb! You created a perfect 90° right angle!' }
-        }
-      }
-    } else if (actId === 'act_5_2') {
-      let foundObtuse = false
-      for (let pt of points) {
-        const conns = segments.filter(s => s.p1Id === pt.id || s.p2Id === pt.id)
-        if (conns.length === 2) {
-          const o1 = conns[0].p1Id === pt.id ? conns[0].p2Id : conns[0].p1Id
-          const o2 = conns[1].p1Id === pt.id ? conns[1].p2Id : conns[1].p1Id
-          const p1 = getPt(o1)
-          const p2 = getPt(o2)
-          if (p1 && p2) {
-            const dx1 = p1.x - pt.x
-            const dy1 = p1.y - pt.y
-            const dx2 = p2.x - pt.x
-            const dy2 = p2.y - pt.y
-            const len1 = Math.hypot(dx1, dy1)
-            const len2 = Math.hypot(dx2, dy2)
-            if (len1 > 0 && len2 > 0) {
-              const cosVal = (dx1 * dx2 + dy1 * dy2) / (len1 * len2)
-              const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
-              if (angle > 92 && angle < 178) {
-                foundObtuse = true
-                break
-              }
+          const pStart = getPt(r1.p1Id)
+          const p1 = getPt(r1.p2Id)
+          const p2 = getPt(r2.p2Id)
+          if (!pStart || !p1 || !p2) {
+            feedback = { status: 'error', message: 'Both rays must connect to valid endpoints.' }
+          } else {
+            const dx1 = p1.x - pStart.x, dy1 = p1.y - pStart.y
+            const dx2 = p2.x - pStart.x, dy2 = p2.y - pStart.y
+            const dot = dx1 * dx2 + dy1 * dy2
+            const cross = Math.abs(dy1 * dx2 - dy2 * dx1)
+            const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+            if (cross / lenProduct > 0.05 || dot >= 0) {
+              feedback = { status: 'error', message: 'The rays must point in opposite directions to form a straight line.' }
+            } else {
+              feedback = { status: 'success', message: 'Superb! The two opposite rays form a perfect straight line.' }
             }
           }
         }
       }
-      if (!foundObtuse) {
-        feedback = { status: 'error', message: 'Could not find two segments sharing a vertex that form an angle between 90° and 180°.' }
+    } else if (actId === 'act_5_1') {
+      if (segments.length !== 2) {
+        feedback = { status: 'error', message: 'An angle needs exactly two segments meeting at a vertex point.' }
       } else {
-        feedback = { status: 'success', message: 'Outstanding! You made an obtuse angle.' }
+        const s1 = segments[0], s2 = segments[1]
+        let vertexId = null, o1 = null, o2 = null
+        if (s1.p1Id === s2.p1Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p2Id; }
+        else if (s1.p1Id === s2.p2Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p1Id; }
+        else if (s1.p2Id === s2.p1Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p2Id; }
+        else if (s1.p2Id === s2.p2Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p1Id; }
+        
+        if (!vertexId || o1 === o2) {
+          feedback = { status: 'error', message: 'An angle needs exactly two segments meeting at a shared vertex point.' }
+        } else {
+          const v = getPt(vertexId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct === 0) {
+            feedback = { status: 'error', message: 'Your segments are invalid.' }
+          } else {
+            const cosVal = dot / lenProduct
+            const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+            if (Math.abs(angle - 90) > 3) {
+              feedback = { status: 'error', message: 'Your angle is not 90 degrees. Adjust the segments to make a perfect corner.' }
+            } else {
+              feedback = { status: 'success', message: 'Perfect 90° right angle! It is a clean square corner.' }
+            }
+          }
+        }
+      }
+    } else if (actId === 'act_5_2') {
+      if (segments.length !== 2) {
+        feedback = { status: 'error', message: 'Please draw two connected segments to form an angle.' }
+      } else {
+        const s1 = segments[0], s2 = segments[1]
+        let vertexId = null, o1 = null, o2 = null
+        if (s1.p1Id === s2.p1Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p2Id; }
+        else if (s1.p1Id === s2.p2Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p1Id; }
+        else if (s1.p2Id === s2.p1Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p2Id; }
+        else if (s1.p2Id === s2.p2Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p1Id; }
+        
+        if (!vertexId || o1 === o2) {
+          feedback = { status: 'error', message: 'Please draw two segments sharing a vertex.' }
+        } else {
+          const v = getPt(vertexId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct === 0) {
+            feedback = { status: 'error', message: 'Your segments are invalid.' }
+          } else {
+            const cosVal = dot / lenProduct
+            const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+            if (angle >= 90 || angle < 10) {
+              feedback = { status: 'error', message: 'This angle is too wide! An acute angle must be sharp and less than 90 degrees.' }
+            } else {
+              feedback = { status: 'success', message: `Great! You drew a sharp acute angle of ${Math.round(angle)}°.` }
+            }
+          }
+        }
       }
     } else if (actId === 'act_6_1') {
-      let foundTriangle = false
-      for (let i = 0; i < points.length; i++) {
-        for (let j = i + 1; j < points.length; j++) {
-          for (let k = j + 1; k < points.length; k++) {
-            const p1 = points[i].id
-            const p2 = points[j].id
-            const p3 = points[k].id
-            const s1 = segments.some(s => (s.p1Id === p1 && s.p2Id === p2) || (s.p1Id === p2 && s.p2Id === p1))
-            const s2 = segments.some(s => (s.p1Id === p2 && s.p2Id === p3) || (s.p1Id === p3 && s.p2Id === p2))
-            const s3 = segments.some(s => (s.p1Id === p3 && s.p2Id === p1) || (s.p1Id === p1 && s.p2Id === p3))
-            if (s1 && s2 && s3) {
-              foundTriangle = true
+      if (!isClosed) {
+        feedback = { status: 'error', message: 'The shape is open. Connect the last point to the first point to seal it.' }
+      } else if (sideCount !== 4) {
+        feedback = { status: 'error', message: 'We need a shape with exactly 4 straight sides.' }
+      } else {
+        feedback = { status: 'success', message: 'Terrific! You drew a closed 4-sided polygon (quadrilateral)!' }
+      }
+    } else if (actId === 'act_6_2') {
+      if (!isClosed) {
+        feedback = { status: 'error', message: 'Connect all the points in a loop so no space escapes.' }
+      } else if (sideCount !== 5) {
+        feedback = { status: 'error', message: 'A pentagon must have exactly 5 sides. Count your segments!' }
+      } else {
+        feedback = { status: 'success', message: 'Marvelous! You built a 5-sided pentagon!' }
+      }
+    } else if (actId === 'act_7_1') {
+      if (!isClosed || sideCount !== 3) {
+        feedback = { status: 'error', message: 'A triangle must have exactly 3 sides connected in a closed loop.' }
+      } else {
+        const lengths = segments.map(s => {
+          const p1 = getPt(s.p1Id), p2 = getPt(s.p2Id)
+          return Math.hypot(p2.x - p1.x, p2.y - p1.y)
+        })
+        const [d1, d2, d3] = lengths
+        const isIsosceles = Math.abs(d1 - d2) < 5 || Math.abs(d2 - d3) < 5 || Math.abs(d3 - d1) < 5
+        if (!isIsosceles) {
+          feedback = { status: 'error', message: 'Two of the sides must be equal. Use the ruler tool to match their lengths.' }
+        } else {
+          feedback = { status: 'success', message: 'Splendid! You drew a valid isosceles triangle!' }
+        }
+      }
+    } else if (actId === 'act_7_2') {
+      if (!isClosed || sideCount !== 3) {
+        feedback = { status: 'error', message: 'A triangle must have exactly 3 sides connected in a closed loop.' }
+      } else {
+        let hasRightAngle = false
+        for (let ptId of ptIds) {
+          const conns = segments.filter(s => s.p1Id === ptId || s.p2Id === ptId)
+          const o1 = conns[0].p1Id === ptId ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === ptId ? conns[1].p2Id : conns[1].p1Id
+          const v = getPt(ptId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct > 0) {
+            const cosVal = dot / lenProduct
+            const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+            if (Math.abs(angle - 90) < 4) {
+              hasRightAngle = true
               break
             }
           }
         }
-      }
-      if (!foundTriangle) {
-        feedback = { status: 'error', message: 'Please connect 3 points with 3 segments to form a closed triangle.' }
-      } else {
-        feedback = { status: 'success', message: 'Incredible! You have built a triangle!' }
-      }
-    } else if (actId === 'act_7_1') {
-      const v1 = points.find(p => Math.hypot(p.x - 250, p.y - 80) < 6)
-      if (!v1) {
-        feedback = { status: 'error', message: 'Place one of the vertices close to (250, 80).' }
-      } else {
-        let validEquilateral = false
-        for (let i = 0; i < points.length; i++) {
-          for (let j = i + 1; j < points.length; j++) {
-            const pA = points[i]
-            const pB = points[j]
-            if (pA.id === v1.id || pB.id === v1.id) {
-              const thirdPts = points.filter(p => p.id !== pA.id && p.id !== pB.id)
-              for (let pC of thirdPts) {
-                const s1 = segments.some(s => (s.p1Id === pA.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pA.id))
-                const s2 = segments.some(s => (s.p1Id === pB.id && s.p2Id === pC.id) || (s.p1Id === pC.id && s.p2Id === pB.id))
-                const s3 = segments.some(s => (s.p1Id === pC.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pC.id))
-                if (s1 && s2 && s3) {
-                  const d1 = Math.hypot(pA.x - pB.x, pA.y - pB.y)
-                  const d2 = Math.hypot(pB.x - pC.x, pB.y - pC.y)
-                  const d3 = Math.hypot(pC.x - pA.x, pC.y - pA.y)
-                  if (Math.abs(d1 - 120) < 6 && Math.abs(d2 - 120) < 6 && Math.abs(d3 - 120) < 6) {
-                    validEquilateral = true
-                    break
-                  }
-                }
-              }
-            }
-          }
-        }
-        if (!validEquilateral) {
-          feedback = { status: 'error', message: 'Draw a closed triangle with one vertex near (250, 80) and all sides exactly 6 units (120 pixels) long.' }
+        if (!hasRightAngle) {
+          feedback = { status: 'error', message: 'Your triangle needs exactly one 90-degree corner. Use the angle tool to check.' }
         } else {
-          feedback = { status: 'success', message: 'Majestic! That is a perfect equilateral triangle!' }
+          feedback = { status: 'success', message: 'Wonderful! A right-angled triangle with a perfect 90° corner.' }
         }
       }
     } else if (actId === 'act_8_1') {
-      let foundSquare = false
-      for (let a = 0; a < points.length; a++) {
-        for (let b = 0; b < points.length; b++) {
-          if (a === b) continue
-          for (let c = 0; c < points.length; c++) {
-            if (c === a || c === b) continue
-            for (let d = 0; d < points.length; d++) {
-              if (d === a || d === b || d === c) continue
-              
-              const pA = points[a], pB = points[b], pC = points[c], pD = points[d]
-              const sab = segments.some(s => (s.p1Id === pA.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pA.id))
-              const sbc = segments.some(s => (s.p1Id === pB.id && s.p2Id === pC.id) || (s.p1Id === pC.id && s.p2Id === pB.id))
-              const scd = segments.some(s => (s.p1Id === pC.id && s.p2Id === pD.id) || (s.p1Id === pD.id && s.p2Id === pC.id))
-              const sda = segments.some(s => (s.p1Id === pD.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pD.id))
-              
-              if (sab && sbc && scd && sda) {
-                const dab = Math.hypot(pA.x - pB.x, pA.y - pB.y)
-                const dbc = Math.hypot(pB.x - pC.x, pB.y - pC.y)
-                const dcd = Math.hypot(pC.x - pD.x, pC.y - pD.y)
-                const dda = Math.hypot(pD.x - pA.x, pD.y - pA.y)
-                const dac = Math.hypot(pA.x - pC.x, pA.y - pC.y)
-                
-                if (Math.abs(dab - 100) < 6 && Math.abs(dbc - 100) < 6 && Math.abs(dcd - 100) < 6 && Math.abs(dda - 100) < 6) {
-                  if (Math.abs(dab*dab + dbc*dbc - dac*dac) < 1000) {
-                    foundSquare = true
-                    break
-                  }
-                }
-              }
+      if (!isClosed || sideCount !== 4) {
+        feedback = { status: 'error', message: 'A rectangle must have exactly 4 sides connected in a closed loop.' }
+      } else {
+        let anglesAll90 = true
+        for (let ptId of ptIds) {
+          const conns = segments.filter(s => s.p1Id === ptId || s.p2Id === ptId)
+          const o1 = conns[0].p1Id === ptId ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === ptId ? conns[1].p2Id : conns[1].p1Id
+          const v = getPt(ptId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct > 0) {
+            const angle = Math.acos(Math.max(-1, Math.min(1, dot / lenProduct))) * 180 / Math.PI
+            if (Math.abs(angle - 90) > 4) {
+              anglesAll90 = false
+              break
             }
+          } else {
+            anglesAll90 = false
+            break
           }
         }
-      }
-      if (!foundSquare) {
-        feedback = { status: 'error', message: 'Please draw a perfect 5x5 units (100x100 pixels) square connected by segments.' }
-      } else {
-        feedback = { status: 'success', message: 'Incredible square footing! You are a master mason!' }
+        if (!anglesAll90) {
+          feedback = { status: 'error', message: 'All 4 corners must be 90-degree right angles and opposite sides must be equal.' }
+        } else {
+          feedback = { status: 'success', message: 'Magnificent! You drew a perfect rectangle!' }
+        }
       }
     } else if (actId === 'act_8_2') {
-      let foundRectangle = false
-      for (let a = 0; a < points.length; a++) {
-        for (let b = 0; b < points.length; b++) {
-          if (a === b) continue
-          for (let c = 0; c < points.length; c++) {
-            if (c === a || c === b) continue
-            for (let d = 0; d < points.length; d++) {
-              if (d === a || d === b || d === c) continue
-              
-              const pA = points[a], pB = points[b], pC = points[c], pD = points[d]
-              const sab = segments.some(s => (s.p1Id === pA.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pA.id))
-              const sbc = segments.some(s => (s.p1Id === pB.id && s.p2Id === pC.id) || (s.p1Id === pC.id && s.p2Id === pB.id))
-              const scd = segments.some(s => (s.p1Id === pC.id && s.p2Id === pD.id) || (s.p1Id === pD.id && s.p2Id === pC.id))
-              const sda = segments.some(s => (s.p1Id === pD.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pD.id))
-              
-              if (sab && sbc && scd && sda) {
-                const dab = Math.hypot(pA.x - pB.x, pA.y - pB.y)
-                const dbc = Math.hypot(pB.x - pC.x, pB.y - pC.y)
-                const dcd = Math.hypot(pC.x - pD.x, pC.y - pD.y)
-                const dda = Math.hypot(pD.x - pA.x, pD.y - pA.y)
-                const dac = Math.hypot(pA.x - pC.x, pA.y - pC.y)
-                
-                const match1 = (Math.abs(dab - 160) < 6 && Math.abs(dbc - 80) < 6 && Math.abs(dcd - 160) < 6 && Math.abs(dda - 80) < 6)
-                const match2 = (Math.abs(dab - 80) < 6 && Math.abs(dbc - 160) < 6 && Math.abs(dcd - 80) < 6 && Math.abs(dda - 160) < 6)
-                
-                if (match1 || match2) {
-                  if (Math.abs(dab*dab + dbc*dbc - dac*dac) < 1000) {
-                    foundRectangle = true
-                    break
-                  }
-                }
-              }
+      if (!isClosed || sideCount !== 4) {
+        feedback = { status: 'error', message: 'A square must have exactly 4 sides connected in a closed loop.' }
+      } else {
+        let anglesAll90 = true
+        for (let ptId of ptIds) {
+          const conns = segments.filter(s => s.p1Id === ptId || s.p2Id === ptId)
+          const o1 = conns[0].p1Id === ptId ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === ptId ? conns[1].p2Id : conns[1].p1Id
+          const v = getPt(ptId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct > 0) {
+            const angle = Math.acos(Math.max(-1, Math.min(1, dot / lenProduct))) * 180 / Math.PI
+            if (Math.abs(angle - 90) > 4) {
+              anglesAll90 = false
+              break
             }
+          } else {
+            anglesAll90 = false
+            break
+          }
+        }
+        if (!anglesAll90) {
+          feedback = { status: 'error', message: 'All corners must be 90 degrees.' }
+        } else {
+          const lengths = segments.map(s => {
+            const p1 = getPt(s.p1Id), p2 = getPt(s.p2Id)
+            return Math.hypot(p2.x - p1.x, p2.y - p1.y)
+          })
+          const [d1, d2, d3, d4] = lengths
+          const avgLen = (d1 + d2 + d3 + d4) / 4
+          const allSidesEqual = lengths.every(l => Math.abs(l - avgLen) < 5)
+          if (!allSidesEqual) {
+            feedback = { status: 'error', message: 'All 4 sides of a square must be the exact same length, and all corners must be 90 degrees.' }
+          } else {
+            feedback = { status: 'success', message: 'Superb! You drew a perfect square!' }
           }
         }
       }
-      if (!foundRectangle) {
-        feedback = { status: 'error', message: 'Please draw a rectangle with width 160 pixels and height 80 pixels.' }
-      } else if (selectedOption !== currentActivity.correct_answer) {
-        feedback = { status: 'error', message: 'Please select the correct answer for the question below.' }
-      } else {
-        feedback = { status: 'success', message: 'Correct! The area of the rectangle is indeed 32.0 sq units!' }
-      }
     }
-    
+
     setValidationFeedback(feedback)
     if (feedback.status === 'success') {
       triggerSuccessAnimation()
@@ -50168,6 +50252,10 @@ function GeometryApp({ onBack }) {
     )
   }
 
+  const completedInChapter = currentChapter.activities.filter(act => completedActivities.includes(act.activity_id)).length
+  const totalCompletedAll = chapters.reduce((acc, ch) => acc + ch.activities.filter(act => completedActivities.includes(act.activity_id)).length, 0)
+  const totalActivitiesAll = chapters.reduce((acc, ch) => acc + ch.activities.length, 0)
+
   return (
     <QuizLayout title="GeoCraft" subtitle="Let's learn geometry shape-by-shape!" onBack={handleBackToHome}>
       <div className="geometry-workspace" style={{ fontFamily: 'var(--font-ui, "DM Sans", sans-serif)', color: 'var(--clr-text)', marginTop: '1rem' }}>
@@ -50278,9 +50366,14 @@ function GeometryApp({ onBack }) {
         <div className="card" style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--clr-border, #444)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Active Challenge</h3>
-            <span style={{ fontSize: '0.82rem', background: 'var(--clr-border, #333)', padding: '2px 8px', borderRadius: '4px', color: 'var(--clr-text-soft)' }}>
-              Activity {currentActivityIndex + 1} of {currentChapter.activities.length}
-            </span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', background: 'var(--clr-border, #333)', padding: '2px 8px', borderRadius: '4px', color: 'var(--clr-text-soft)' }}>
+                Activity {currentActivityIndex + 1} of {currentChapter.activities.length}
+              </span>
+              <span style={{ fontSize: '0.82rem', background: 'rgba(76, 175, 80, 0.15)', border: '1px solid var(--clr-accent, #4caf50)', padding: '2px 8px', borderRadius: '4px', color: '#81c784', fontWeight: 'bold' }}>
+                {completedInChapter} of {currentChapter.activities.length} done
+              </span>
+            </div>
           </div>
 
           <p style={{ fontSize: '1.1rem', color: 'var(--clr-text)', lineHeight: '1.5', margin: '0.5rem 0 1.25rem' }}>
@@ -50784,16 +50877,52 @@ function GeometryApp({ onBack }) {
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              {currentActivityIndex > 0 && (
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={handleBackToHome}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'transparent',
+                  color: 'var(--clr-text-soft, #aaa)',
+                  border: '1px solid var(--clr-border, #444)',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Go to Home Dashboard"
+              >
+                🏠 Dashboard
+              </button>
+
+              {currentActivityIndex > 0 ? (
                 <button 
                   type="button"
                   onClick={() => setCurrentActivityIndex(n => n - 1)}
                   className="back-button"
-                  style={{ float: 'none', margin: 0, padding: '6px 12px', fontSize: '0.85rem' }}
+                  style={{ float: 'none', margin: 0, padding: '8px 12px', fontSize: '0.85rem', background: 'var(--clr-border, #333)', color: 'var(--clr-text)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
                 >
                   ← Previous Activity
                 </button>
+              ) : (
+                currentChapterId > 1 && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const prevCh = chapters.find(c => c.chapter_id === currentChapterId - 1)
+                      setCurrentChapterId(currentChapterId - 1)
+                      setCurrentActivityIndex(prevCh.activities.length - 1)
+                    }}
+                    className="back-button"
+                    style={{ float: 'none', margin: 0, padding: '8px 12px', fontSize: '0.85rem', background: 'var(--clr-border, #333)', color: 'var(--clr-text)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    ← Previous Chapter
+                  </button>
+                )
               )}
               
               <button
@@ -50826,7 +50955,7 @@ function GeometryApp({ onBack }) {
                   Next Activity →
                 </button>
               ) : (
-                currentChapterId < chapters.length && (
+                currentChapterId < chapters.length ? (
                   <button 
                     type="button"
                     onClick={() => {
@@ -50836,6 +50965,14 @@ function GeometryApp({ onBack }) {
                     style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--clr-accent, #4caf50)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}
                   >
                     Next Chapter →
+                  </button>
+                ) : (
+                  <button 
+                    type="button"
+                    onClick={handleBackToHome}
+                    style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--clr-accent, #4caf50)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(76, 175, 80, 0.2)' }}
+                  >
+                    🎉 Complete & Go Home →
                   </button>
                 )
               )}
