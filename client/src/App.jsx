@@ -36195,27 +36195,6 @@ function Home({ onSelect }) {
   const matchFilter = (a) => a.name.toLowerCase().includes(search.toLowerCase()) || a.subtitle.toLowerCase().includes(search.toLowerCase())
   const apps = isSearching ? regularApps.filter(matchFilter) : regularApps
 
-  // Grid layout tracking (for responsive display)
-  const gridRef = useRef(null)
-  // Number of columns currently displayed (responsive)
-  const [cols, setCols] = useState(4)
-
-  // Update grid dimensions on resize (for responsive grid calculation)
-  useEffect(() => {
-    const updateCols = () => {
-      if (!gridRef.current) return
-      const style = window.getComputedStyle(gridRef.current)
-      const columns = style.getPropertyValue('grid-template-columns').split(' ').length
-      setCols(columns)
-    }
-    updateCols()
-    window.addEventListener('resize', updateCols)
-    return () => window.removeEventListener('resize', updateCols)
-  }, [])
-
-  // Calculate number of rows for display (for grid dimension label at bottom)
-  const rows = Math.ceil(apps.length / (cols || 1))
-
   return (
     <>
       <div style={{ position: 'relative' }}>
@@ -36265,7 +36244,7 @@ function Home({ onSelect }) {
           onChange={e => setSearch(e.target.value)}
         />
       </div>
-      <div className="menu-grid" ref={gridRef}>
+      <div className="menu-grid">
         {apps.map((app) => (
           <button key={app.key} className={`menu-card ${app.color}`} onClick={() => onSelect(app.key)}>
             <span className="menu-title">{app.name}</span>
@@ -36273,7 +36252,6 @@ function Home({ onSelect }) {
           </button>
         ))}
       </div>
-      <div className="grid-dimension">{rows} × {cols}</div>
     </>
   )
 }
