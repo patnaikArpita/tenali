@@ -249,21 +249,11 @@ function AuthGate({ children }) {
   )
 }
 
-// Inject version badge into DOM once (appears on all routes)
-;(() => {
-  if (typeof document !== 'undefined' && !document.getElementById('tenali-version')) {
-    const el = document.createElement('div')
-    el.id = 'tenali-version'
-    Object.assign(el.style, {
-      position: 'fixed', top: '8px', right: '12px', zIndex: '9999',
-      fontSize: '0.65rem', opacity: '0.55', pointerEvents: 'none',
-      textAlign: 'right', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif',
-      color: 'var(--clr-text-soft)',
-    })
-    el.innerHTML = `<div>v${TENALI_VERSION}</div><div>${TENALI_BUILD_DATE}</div>`
-    document.body.appendChild(el)
-  }
-})()
+// Version badge removed. Clean up if existing.
+if (typeof document !== 'undefined') {
+  const el = document.getElementById('tenali-version')
+  if (el) el.remove()
+}
 
 // Default number of questions for quizzes
 const DEFAULT_TOTAL = 20
@@ -36092,12 +36082,11 @@ function App() {
  * @param {Function} props.onSelect - Callback when user selects a quiz: receives mode key (e.g., 'gk')
  */
 function Home({ onSelect }) {
-  // Special featured apps (shown in highlighted first row)
+  // Special featured apps (shown in highlighted first row & three-line menu)
   const featuredApps = [
     { key: 'randommix', name: 'Random Mix', subtitle: 'Adaptive cross-topic quiz', color: 'featured' },
     { key: 'custom', name: 'Custom Lesson', subtitle: 'Build your own mixed quiz', color: 'featured' },
-    { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' },
-    { key: 'geocraft', name: 'GeoCraft', subtitle: 'Geometry Game', color: 'featured' }
+    { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' }
   ]
 
   // All regular quiz apps sorted alphabetically by name
@@ -36121,6 +36110,7 @@ function Home({ onSelect }) {
     { key: 'dotprod', name: 'Dot Products', subtitle: 'Vectors, matrices, fill blanks', color: 'blue' },
     { key: 'fractionadd', name: 'Fractions', subtitle: 'Add, subtract, multiply & divide', color: 'green' },
     { key: 'funceval', name: 'Functions', subtitle: 'Evaluate f(x), f(x,y), f(x,y,z)', color: 'green' },
+    { key: 'geocraft', name: 'GeoCraft', subtitle: 'Geometry Game', color: 'featured' },
     { key: 'gk', name: 'GK', subtitle: 'General Knowledge questions', color: 'purple' },
     { key: 'gst', name: 'GST', subtitle: 'Goods & Services Tax', color: 'purple' },
     { key: 'hcflcm', name: 'HCF & LCM', subtitle: 'Highest common factor & LCM', color: 'blue' },
@@ -36182,51 +36172,28 @@ function Home({ onSelect }) {
     { key: 'polygym', name: 'Polynomials Gym', subtitle: 'Arithmetic → monomial algebra (MCQ)', color: 'blue' },
   ]
 
-  // Combined list for search filtering
-  const allApps = [...featuredApps, ...regularApps]
+  // Search term for filtering apps
+  const [search, setSearch] = useState('')
 
-  // Hamburger menu open state
+  // Hamburger menu dropdown state
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
 
-  // Close menu when clicking outside
+  // Handle click outside to close hamburger menu
   useEffect(() => {
-    if (!menuOpen) return
-    const handleClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [menuOpen])
-
-  // Search term for filtering apps
-  const [search, setSearch] = useState('')
+    const handleOutsideClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [])
 
   // Filtered lists
   const isSearching = search.trim() !== ''
   const matchFilter = (a) => a.name.toLowerCase().includes(search.toLowerCase()) || a.subtitle.toLowerCase().includes(search.toLowerCase())
-  const filteredFeatured = isSearching ? featuredApps.filter(matchFilter) : featuredApps
-  const filteredRegular = isSearching ? regularApps.filter(matchFilter) : regularApps
-  const apps = isSearching ? allApps.filter(matchFilter) : allApps
-
-  // Grid layout tracking (for responsive display)
-  const gridRef = useRef(null)
-  // Number of columns currently displayed (responsive)
-  const [cols, setCols] = useState(4)
-
-  // Update grid dimensions on resize (for responsive grid calculation)
-  useEffect(() => {
-    const updateCols = () => {
-      if (!gridRef.current) return
-      const style = window.getComputedStyle(gridRef.current)
-      const columns = style.getPropertyValue('grid-template-columns').split(' ').length
-      setCols(columns)
-    }
-    updateCols()
-    window.addEventListener('resize', updateCols)
-    return () => window.removeEventListener('resize', updateCols)
-  }, [])
-
-  // Calculate number of rows for display (for grid dimension label at bottom)
-  const rows = Math.ceil(apps.length / (cols || 1))
+  const apps = isSearching ? regularApps.filter(matchFilter) : regularApps
 
   return (
     <>
@@ -36277,15 +36244,14 @@ function Home({ onSelect }) {
           onChange={e => setSearch(e.target.value)}
         />
       </div>
-      <div className="menu-grid" ref={gridRef}>
-        {filteredRegular.map((app) => (
+      <div className="menu-grid">
+        {apps.map((app) => (
           <button key={app.key} className={`menu-card ${app.color}`} onClick={() => onSelect(app.key)}>
             <span className="menu-title">{app.name}</span>
             <span className="menu-subtitle">{app.subtitle}</span>
           </button>
         ))}
       </div>
-      <div className="grid-dimension">{rows} × {cols}</div>
     </>
   )
 }
@@ -49620,13 +49586,37 @@ function GeometryApp({ onBack }) {
     if (onBack) onBack()
   }
 
+  // Validation and hint feedback state
+  const [validationFeedback, setValidationFeedback] = useState({ status: null, message: '' })
+  const [particles, setParticles] = useState([])
+  const [selectedOption, setSelectedOption] = useState(null)
+  const [showHint, setShowHint] = useState(false)
+
   // Reset drawing canvas and default the active tool when activity or chapter changes
   useEffect(() => {
-    setPoints([])
+    let initialPoints = []
+    if (currentActivity) {
+      if (currentActivity.activity_id === 'act_3_1') {
+        initialPoints = [
+          { id: 'A', x: 140, y: 150, color: '#4caf50', isPreplaced: true }, // Green
+          { id: 'B', x: 360, y: 150, color: '#f44336', isPreplaced: true }  // Red
+        ]
+      } else if (currentActivity.activity_id === 'act_4_1') {
+        initialPoints = [
+          { id: 'A', x: 160, y: 150, color: '#4caf50', isPreplaced: true }, // Green
+          { id: 'B', x: 320, y: 150, color: '#ff9800', isPreplaced: true }  // Orange
+        ]
+      }
+    }
+    
+    setPoints(initialPoints)
     setSegments([])
     setLines([])
     setRays([])
     setSelectedPoints([])
+    setValidationFeedback({ status: null, message: '' })
+    setSelectedOption(null)
+    setShowHint(false)
     
     if (currentActivity && currentActivity.allowed_tools && currentActivity.allowed_tools.length > 0) {
       setActiveTool(currentActivity.allowed_tools[0])
@@ -49647,8 +49637,8 @@ function GeometryApp({ onBack }) {
     const rawX = e.clientX - rect.left
     const rawY = e.clientY - rect.top
     
-    // Snap to grid (grid spacing 20px)
-    const gridSpacing = 20
+    // Snap to grid (grid spacing 10px)
+    const gridSpacing = 10
     const snapX = Math.round(rawX / gridSpacing) * gridSpacing
     const snapY = Math.round(rawY / gridSpacing) * gridSpacing
     
@@ -49742,6 +49732,386 @@ function GeometryApp({ onBack }) {
       y1: p1.y,
       x2: p2.x + ux * 1000,
       y2: p2.y + uy * 1000
+    }
+  }
+
+  // Particle physics update loop
+  useEffect(() => {
+    if (particles.length === 0) return
+    const frameId = requestAnimationFrame(() => {
+      setParticles(prev => prev
+        .map(p => ({
+          ...p,
+          x: p.x + p.vx,
+          y: p.y + p.vy,
+          vy: p.vy + 0.1, // gravity/drift
+          alpha: p.alpha - 0.02
+        }))
+        .filter(p => p.alpha > 0)
+      )
+    })
+    return () => cancelAnimationFrame(frameId)
+  }, [particles])
+
+  const triggerSuccessAnimation = () => {
+    const emojis = ['🎉', '✨', '🌟', '🥳', '👏', '💖', '🚀', '🌈', '🎓', '🔮']
+    const newParticles = Array.from({ length: 20 }).map(() => ({
+      id: Math.random(),
+      emoji: emojis[Math.floor(Math.random() * emojis.length)],
+      x: 100 + Math.random() * 300,
+      y: 260,
+      vx: (Math.random() - 0.5) * 4,
+      vy: -3 - Math.random() * 4,
+      alpha: 1,
+      size: 16 + Math.random() * 16
+    }))
+    setParticles(newParticles)
+  }
+
+  const handleCheckDrawing = () => {
+    const actId = currentActivity.activity_id
+    let feedback = { status: 'error', message: 'Invalid activity validation.' }
+
+    // Closed loop helper for polygons
+    const sideCount = segments.length
+    const ptIds = Array.from(new Set(segments.flatMap(s => [s.p1Id, s.p2Id])))
+    const degMap = {}
+    segments.forEach(s => {
+      degMap[s.p1Id] = (degMap[s.p1Id] || 0) + 1
+      degMap[s.p2Id] = (degMap[s.p2Id] || 0) + 1
+    })
+    const isClosed = sideCount > 2 && ptIds.length === sideCount && Object.values(degMap).every(d => d === 2)
+    
+    if (actId === 'act_1_1') {
+      if (points.length !== 1) {
+        feedback = { status: 'error', message: 'We need exactly one point placed on the target center.' }
+      } else {
+        const pt = points[0]
+        if (Math.hypot(pt.x - 250, pt.y - 150) >= 5) {
+          feedback = { status: 'error', message: 'Make sure your point is close to the center of the target screen.' }
+        } else {
+          feedback = { status: 'success', message: 'Perfect hit! You placed a point right on the target center!' }
+        }
+      }
+    } else if (actId === 'act_1_2') {
+      if (points.length !== 3) {
+        feedback = { status: 'error', message: 'We need exactly three points on the screen to form corners.' }
+      } else {
+        const [p1, p2, p3] = points
+        const crossProduct = Math.abs(p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y))
+        if (crossProduct < 80) {
+          feedback = { status: 'error', message: 'Your points are in a straight line. Move them around so they form a triangle shape.' }
+        } else {
+          feedback = { status: 'success', message: 'Great job! Three non-collinear points form the corners of a triangle!' }
+        }
+      }
+    } else if (actId === 'act_2_1') {
+      if (points.length < 2) {
+        feedback = { status: 'error', message: 'Please place at least two points on the canvas.' }
+      } else if (lines.length !== 1) {
+        feedback = { status: 'error', message: 'We need exactly one line drawn through two points.' }
+      } else {
+        const l = lines[0]
+        const p1 = getPt(l.p1Id)
+        const p2 = getPt(l.p2Id)
+        if (!p1 || !p2) {
+          feedback = { status: 'error', message: 'Make sure your line goes straight through both points.' }
+        } else {
+          feedback = { status: 'success', message: 'Excellent! An endless line passes through both points.' }
+        }
+      }
+    } else if (actId === 'act_2_2') {
+      if (lines.length !== 2) {
+        feedback = { status: 'error', message: 'Please draw exactly two lines on the canvas.' }
+      } else {
+        const l1 = lines[0], l2 = lines[1]
+        const p1a = getPt(l1.p1Id), p1b = getPt(l1.p2Id)
+        const p2a = getPt(l2.p1Id), p2b = getPt(l2.p2Id)
+        if (!p1a || !p1b || !p2a || !p2b || p1a.id === p1b.id || p2a.id === p2b.id) {
+          feedback = { status: 'error', message: 'Both lines must be valid and pass through two distinct points.' }
+        } else {
+          const dx1 = p1b.x - p1a.x, dy1 = p1b.y - p1a.y
+          const dx2 = p2b.x - p2a.x, dy2 = p2b.y - p2a.y
+          const cross = Math.abs(dy1 * dx2 - dy2 * dx1)
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          if (cross / lenProduct > 0.05) {
+            feedback = { status: 'error', message: 'The two lines must run in the exact same direction and have the same slope so they never intersect.' }
+          } else {
+            feedback = { status: 'success', message: 'Brilliant! Those two lines are parallel and will never meet!' }
+          }
+        }
+      }
+    } else if (actId === 'act_3_1') {
+      const seg = segments.find(s => (s.p1Id === 'A' && s.p2Id === 'B') || (s.p1Id === 'B' && s.p2Id === 'A'))
+      if (!seg) {
+        feedback = { status: 'error', message: 'Draw exactly one segment directly between the green and red points.' }
+      } else {
+        feedback = { status: 'success', message: 'Awesome bridge! The islands are now connected!' }
+      }
+    } else if (actId === 'act_3_2') {
+      if (segments.length !== 1) {
+        feedback = { status: 'error', message: 'Draw exactly one line segment.' }
+      } else {
+        const s = segments[0]
+        const p1 = getPt(s.p1Id), p2 = getPt(s.p2Id)
+        if (!p1 || !p2) {
+          feedback = { status: 'error', message: 'Draw a valid segment connecting two points.' }
+        } else {
+          const dx = Math.abs(p1.x - p2.x)
+          const dy = Math.abs(p1.y - p2.y)
+          if (dy > 2) {
+            feedback = { status: 'error', message: 'Your segment must be perfectly horizontal (flat).' }
+          } else if (Math.abs(dx - 80) > 4) {
+            feedback = { status: 'error', message: 'Your segment length is incorrect. Measure it with the ruler to make it exactly 4 units (80 pixels).' }
+          } else {
+            feedback = { status: 'success', message: 'Perfect! You drew a horizontal segment exactly 4 units long.' }
+          }
+        }
+      }
+    } else if (actId === 'act_4_1') {
+      const ray = rays.find(r => r.p1Id === 'A' && r.p2Id === 'B')
+      if (!ray) {
+        feedback = { status: 'error', message: 'Make sure the ray starts at the green point and points directly through the orange point.' }
+      } else {
+        feedback = { status: 'success', message: 'Excellent! The ray shines straight through the target!' }
+      }
+    } else if (actId === 'act_4_2') {
+      if (rays.length !== 2) {
+        feedback = { status: 'error', message: 'We need exactly two rays on the screen.' }
+      } else {
+        const r1 = rays[0], r2 = rays[1]
+        if (r1.p1Id !== r2.p1Id) {
+          feedback = { status: 'error', message: 'Both rays must start from the exact same point in the middle.' }
+        } else {
+          const pStart = getPt(r1.p1Id)
+          const p1 = getPt(r1.p2Id)
+          const p2 = getPt(r2.p2Id)
+          if (!pStart || !p1 || !p2) {
+            feedback = { status: 'error', message: 'Both rays must connect to valid endpoints.' }
+          } else {
+            const dx1 = p1.x - pStart.x, dy1 = p1.y - pStart.y
+            const dx2 = p2.x - pStart.x, dy2 = p2.y - pStart.y
+            const dot = dx1 * dx2 + dy1 * dy2
+            const cross = Math.abs(dy1 * dx2 - dy2 * dx1)
+            const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+            if (cross / lenProduct > 0.05 || dot >= 0) {
+              feedback = { status: 'error', message: 'The rays must point in opposite directions to form a straight line.' }
+            } else {
+              feedback = { status: 'success', message: 'Superb! The two opposite rays form a perfect straight line.' }
+            }
+          }
+        }
+      }
+    } else if (actId === 'act_5_1') {
+      if (segments.length !== 2) {
+        feedback = { status: 'error', message: 'An angle needs exactly two segments meeting at a vertex point.' }
+      } else {
+        const s1 = segments[0], s2 = segments[1]
+        let vertexId = null, o1 = null, o2 = null
+        if (s1.p1Id === s2.p1Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p2Id; }
+        else if (s1.p1Id === s2.p2Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p1Id; }
+        else if (s1.p2Id === s2.p1Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p2Id; }
+        else if (s1.p2Id === s2.p2Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p1Id; }
+        
+        if (!vertexId || o1 === o2) {
+          feedback = { status: 'error', message: 'An angle needs exactly two segments meeting at a shared vertex point.' }
+        } else {
+          const v = getPt(vertexId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct === 0) {
+            feedback = { status: 'error', message: 'Your segments are invalid.' }
+          } else {
+            const cosVal = dot / lenProduct
+            const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+            if (Math.abs(angle - 90) > 3) {
+              feedback = { status: 'error', message: 'Your angle is not 90 degrees. Adjust the segments to make a perfect corner.' }
+            } else {
+              feedback = { status: 'success', message: 'Perfect 90° right angle! It is a clean square corner.' }
+            }
+          }
+        }
+      }
+    } else if (actId === 'act_5_2') {
+      if (segments.length !== 2) {
+        feedback = { status: 'error', message: 'Please draw two connected segments to form an angle.' }
+      } else {
+        const s1 = segments[0], s2 = segments[1]
+        let vertexId = null, o1 = null, o2 = null
+        if (s1.p1Id === s2.p1Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p2Id; }
+        else if (s1.p1Id === s2.p2Id) { vertexId = s1.p1Id; o1 = s1.p2Id; o2 = s2.p1Id; }
+        else if (s1.p2Id === s2.p1Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p2Id; }
+        else if (s1.p2Id === s2.p2Id) { vertexId = s1.p2Id; o1 = s1.p1Id; o2 = s2.p1Id; }
+        
+        if (!vertexId || o1 === o2) {
+          feedback = { status: 'error', message: 'Please draw two segments sharing a vertex.' }
+        } else {
+          const v = getPt(vertexId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct === 0) {
+            feedback = { status: 'error', message: 'Your segments are invalid.' }
+          } else {
+            const cosVal = dot / lenProduct
+            const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+            if (angle >= 90 || angle < 10) {
+              feedback = { status: 'error', message: 'This angle is too wide! An acute angle must be sharp and less than 90 degrees.' }
+            } else {
+              feedback = { status: 'success', message: `Great! You drew a sharp acute angle of ${Math.round(angle)}°.` }
+            }
+          }
+        }
+      }
+    } else if (actId === 'act_6_1') {
+      if (!isClosed) {
+        feedback = { status: 'error', message: 'The shape is open. Connect the last point to the first point to seal it.' }
+      } else if (sideCount !== 4) {
+        feedback = { status: 'error', message: 'We need a shape with exactly 4 straight sides.' }
+      } else {
+        feedback = { status: 'success', message: 'Terrific! You drew a closed 4-sided polygon (quadrilateral)!' }
+      }
+    } else if (actId === 'act_6_2') {
+      if (!isClosed) {
+        feedback = { status: 'error', message: 'Connect all the points in a loop so no space escapes.' }
+      } else if (sideCount !== 5) {
+        feedback = { status: 'error', message: 'A pentagon must have exactly 5 sides. Count your segments!' }
+      } else {
+        feedback = { status: 'success', message: 'Marvelous! You built a 5-sided pentagon!' }
+      }
+    } else if (actId === 'act_7_1') {
+      if (!isClosed || sideCount !== 3) {
+        feedback = { status: 'error', message: 'A triangle must have exactly 3 sides connected in a closed loop.' }
+      } else {
+        const lengths = segments.map(s => {
+          const p1 = getPt(s.p1Id), p2 = getPt(s.p2Id)
+          return Math.hypot(p2.x - p1.x, p2.y - p1.y)
+        })
+        const [d1, d2, d3] = lengths
+        const isIsosceles = Math.abs(d1 - d2) < 5 || Math.abs(d2 - d3) < 5 || Math.abs(d3 - d1) < 5
+        if (!isIsosceles) {
+          feedback = { status: 'error', message: 'Two of the sides must be equal. Use the ruler tool to match their lengths.' }
+        } else {
+          feedback = { status: 'success', message: 'Splendid! You drew a valid isosceles triangle!' }
+        }
+      }
+    } else if (actId === 'act_7_2') {
+      if (!isClosed || sideCount !== 3) {
+        feedback = { status: 'error', message: 'A triangle must have exactly 3 sides connected in a closed loop.' }
+      } else {
+        let hasRightAngle = false
+        for (let ptId of ptIds) {
+          const conns = segments.filter(s => s.p1Id === ptId || s.p2Id === ptId)
+          const o1 = conns[0].p1Id === ptId ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === ptId ? conns[1].p2Id : conns[1].p1Id
+          const v = getPt(ptId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct > 0) {
+            const cosVal = dot / lenProduct
+            const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+            if (Math.abs(angle - 90) < 4) {
+              hasRightAngle = true
+              break
+            }
+          }
+        }
+        if (!hasRightAngle) {
+          feedback = { status: 'error', message: 'Your triangle needs exactly one 90-degree corner. Use the angle tool to check.' }
+        } else {
+          feedback = { status: 'success', message: 'Wonderful! A right-angled triangle with a perfect 90° corner.' }
+        }
+      }
+    } else if (actId === 'act_8_1') {
+      if (!isClosed || sideCount !== 4) {
+        feedback = { status: 'error', message: 'A rectangle must have exactly 4 sides connected in a closed loop.' }
+      } else {
+        let anglesAll90 = true
+        for (let ptId of ptIds) {
+          const conns = segments.filter(s => s.p1Id === ptId || s.p2Id === ptId)
+          const o1 = conns[0].p1Id === ptId ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === ptId ? conns[1].p2Id : conns[1].p1Id
+          const v = getPt(ptId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct > 0) {
+            const angle = Math.acos(Math.max(-1, Math.min(1, dot / lenProduct))) * 180 / Math.PI
+            if (Math.abs(angle - 90) > 4) {
+              anglesAll90 = false
+              break
+            }
+          } else {
+            anglesAll90 = false
+            break
+          }
+        }
+        if (!anglesAll90) {
+          feedback = { status: 'error', message: 'All 4 corners must be 90-degree right angles and opposite sides must be equal.' }
+        } else {
+          feedback = { status: 'success', message: 'Magnificent! You drew a perfect rectangle!' }
+        }
+      }
+    } else if (actId === 'act_8_2') {
+      if (!isClosed || sideCount !== 4) {
+        feedback = { status: 'error', message: 'A square must have exactly 4 sides connected in a closed loop.' }
+      } else {
+        let anglesAll90 = true
+        for (let ptId of ptIds) {
+          const conns = segments.filter(s => s.p1Id === ptId || s.p2Id === ptId)
+          const o1 = conns[0].p1Id === ptId ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === ptId ? conns[1].p2Id : conns[1].p1Id
+          const v = getPt(ptId), p1 = getPt(o1), p2 = getPt(o2)
+          const dx1 = p1.x - v.x, dy1 = p1.y - v.y
+          const dx2 = p2.x - v.x, dy2 = p2.y - v.y
+          const lenProduct = Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)
+          const dot = dx1 * dx2 + dy1 * dy2
+          if (lenProduct > 0) {
+            const angle = Math.acos(Math.max(-1, Math.min(1, dot / lenProduct))) * 180 / Math.PI
+            if (Math.abs(angle - 90) > 4) {
+              anglesAll90 = false
+              break
+            }
+          } else {
+            anglesAll90 = false
+            break
+          }
+        }
+        if (!anglesAll90) {
+          feedback = { status: 'error', message: 'All corners must be 90 degrees.' }
+        } else {
+          const lengths = segments.map(s => {
+            const p1 = getPt(s.p1Id), p2 = getPt(s.p2Id)
+            return Math.hypot(p2.x - p1.x, p2.y - p1.y)
+          })
+          const [d1, d2, d3, d4] = lengths
+          const avgLen = (d1 + d2 + d3 + d4) / 4
+          const allSidesEqual = lengths.every(l => Math.abs(l - avgLen) < 5)
+          if (!allSidesEqual) {
+            feedback = { status: 'error', message: 'All 4 sides of a square must be the exact same length, and all corners must be 90 degrees.' }
+          } else {
+            feedback = { status: 'success', message: 'Superb! You drew a perfect square!' }
+          }
+        }
+      }
+    }
+
+    setValidationFeedback(feedback)
+    if (feedback.status === 'success') {
+      triggerSuccessAnimation()
+      if (!completedActivities.includes(actId)) {
+        const nextCompleted = [...completedActivities, actId]
+        setCompletedActivities(nextCompleted)
+        try {
+          localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
+        } catch {}
+      }
     }
   }
 
@@ -49847,6 +50217,10 @@ function GeometryApp({ onBack }) {
       </svg>
     )
   }
+
+  const completedInChapter = currentChapter.activities.filter(act => completedActivities.includes(act.activity_id)).length
+  const totalCompletedAll = chapters.reduce((acc, ch) => acc + ch.activities.filter(act => completedActivities.includes(act.activity_id)).length, 0)
+  const totalActivitiesAll = chapters.reduce((acc, ch) => acc + ch.activities.length, 0)
 
   return (
     <QuizLayout title="GeoCraft" subtitle="Let's learn geometry shape-by-shape!" onBack={handleBackToHome}>
@@ -49958,9 +50332,14 @@ function GeometryApp({ onBack }) {
         <div className="card" style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--clr-border, #444)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Active Challenge</h3>
-            <span style={{ fontSize: '0.82rem', background: 'var(--clr-border, #333)', padding: '2px 8px', borderRadius: '4px', color: 'var(--clr-text-soft)' }}>
-              Activity {currentActivityIndex + 1} of {currentChapter.activities.length}
-            </span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', background: 'var(--clr-border, #333)', padding: '2px 8px', borderRadius: '4px', color: 'var(--clr-text-soft)' }}>
+                Activity {currentActivityIndex + 1} of {currentChapter.activities.length}
+              </span>
+              <span style={{ fontSize: '0.82rem', background: 'rgba(76, 175, 80, 0.15)', border: '1px solid var(--clr-accent, #4caf50)', padding: '2px 8px', borderRadius: '4px', color: '#81c784', fontWeight: 'bold' }}>
+                {completedInChapter} of {currentChapter.activities.length} done
+              </span>
+            </div>
           </div>
 
           <p style={{ fontSize: '1.1rem', color: 'var(--clr-text)', lineHeight: '1.5', margin: '0.5rem 0 1.25rem' }}>
@@ -49980,7 +50359,7 @@ function GeometryApp({ onBack }) {
             flexWrap: 'wrap'
           }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 'bold', marginRight: '0.5rem', color: 'var(--clr-text-soft)' }}>Drawing Tools:</span>
-            {currentActivity.allowed_tools.map(tool => {
+             {currentActivity.allowed_tools.map(tool => {
               const isActive = activeTool === tool
               let label = tool.toUpperCase()
               let icon = '✏️'
@@ -49988,6 +50367,8 @@ function GeometryApp({ onBack }) {
               else if (tool === 'line') { icon = '↔️'; label = 'Line' }
               else if (tool === 'segment') { icon = '➖'; label = 'Segment' }
               else if (tool === 'ray') { icon = '➡️'; label = 'Ray' }
+              else if (tool === 'measure-length') { icon = '📏'; label = 'Ruler' }
+              else if (tool === 'measure-angle') { icon = '📐'; label = 'Protractor' }
               
               return (
                 <button
@@ -50019,11 +50400,26 @@ function GeometryApp({ onBack }) {
             <button
               type="button"
               onClick={() => {
-                setPoints([])
+                let initialPoints = []
+                if (currentActivity) {
+                  if (currentActivity.activity_id === 'act_3_1') {
+                    initialPoints = [
+                      { id: 'A', x: 140, y: 150, color: '#4caf50', isPreplaced: true },
+                      { id: 'B', x: 360, y: 150, color: '#f44336', isPreplaced: true }
+                    ]
+                  } else if (currentActivity.activity_id === 'act_4_1') {
+                    initialPoints = [
+                      { id: 'A', x: 160, y: 150, color: '#4caf50', isPreplaced: true },
+                      { id: 'B', x: 320, y: 150, color: '#ff9800', isPreplaced: true }
+                    ]
+                  }
+                }
+                setPoints(initialPoints)
                 setSegments([])
                 setLines([])
                 setRays([])
                 setSelectedPoints([])
+                setValidationFeedback({ status: null, message: '' })
               }}
               style={{
                 padding: '6px 12px',
@@ -50068,6 +50464,28 @@ function GeometryApp({ onBack }) {
               
               {/* Grid Background */}
               <rect width="500" height="300" fill="url(#canvas-grid)" />
+              
+              {/* Custom background visual aids */}
+              {currentActivity && currentActivity.activity_id === 'act_1_1' && (
+                <g opacity="0.3">
+                  <circle cx="250" cy="150" r="60" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
+                  <circle cx="250" cy="150" r="40" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
+                  <circle cx="250" cy="150" r="20" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" />
+                  <circle cx="250" cy="150" r="4" fill="var(--clr-accent, #4caf50)" />
+                </g>
+              )}
+              {currentActivity && currentActivity.activity_id === 'act_3_1' && (
+                <g opacity="0.3">
+                  {/* Island A */}
+                  <circle cx="140" cy="150" r="40" fill="#4caf50" />
+                  <circle cx="130" cy="140" r="25" fill="#8bc34a" />
+                  {/* Island B */}
+                  <circle cx="360" cy="150" r="40" fill="#f44336" />
+                  <circle cx="370" cy="160" r="25" fill="#ff5722" />
+                  <text x="140" y="90" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island A</text>
+                  <text x="360" y="90" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island B</text>
+                </g>
+              )}
               
               {/* Render Lines */}
               {lines.map(line => {
@@ -50131,16 +50549,17 @@ function GeometryApp({ onBack }) {
               {/* Render Points */}
               {points.map(pt => {
                 const isSelected = selectedPoints.includes(pt.id)
+                const ptColor = pt.color || 'var(--clr-accent, #4caf50)'
                 return (
                   <g key={pt.id} style={{ cursor: 'pointer' }}>
                     {isSelected && (
-                      <circle cx={pt.x} cy={pt.y} r="10" fill="var(--clr-accent, #4caf50)" opacity="0.3" />
+                      <circle cx={pt.x} cy={pt.y} r="10" fill={ptColor} opacity="0.3" />
                     )}
                     <circle
                       cx={pt.x}
                       cy={pt.y}
                       r="5"
-                      fill="var(--clr-accent, #4caf50)"
+                      fill={ptColor}
                       stroke="#fff"
                       strokeWidth="1.5"
                       onClick={(e) => {
@@ -50163,50 +50582,332 @@ function GeometryApp({ onBack }) {
                   </g>
                 )
               })}
+
+              {/* Ruler Overlay (activeTool === 'measure-length') */}
+              {activeTool === 'measure-length' && segments.map(seg => {
+                const p1 = getPt(seg.p1Id)
+                const p2 = getPt(seg.p2Id)
+                if (!p1 || !p2) return null
+                const distPx = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+                const distGrid = distPx / 20
+                const midX = (p1.x + p2.x) / 2
+                const midY = (p1.y + p2.y) / 2
+                const dx = p2.x - p1.x
+                const dy = p2.y - p1.y
+                const len = Math.hypot(dx, dy)
+                let ox = 0, oy = 0
+                if (len > 0) {
+                  ox = -(dy / len) * 14
+                  oy = (dx / len) * 14
+                }
+                return (
+                  <g key={`len-${seg.id}`}>
+                    <rect
+                      x={midX + ox - 20}
+                      y={midY + oy - 9}
+                      width="40"
+                      height="18"
+                      rx="4"
+                      fill="var(--clr-bg, #0f0f11)"
+                      stroke="var(--clr-accent, #4caf50)"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={midX + ox}
+                      y={midY + oy + 4}
+                      fill="var(--clr-accent, #4caf50)"
+                      fontSize="10"
+                      fontWeight="bold"
+                      textAnchor="middle"
+                      style={{ userSelect: 'none' }}
+                    >
+                      {distGrid.toFixed(1)}
+                    </text>
+                  </g>
+                )
+              })}
+
+              {/* Protractor Overlay (activeTool === 'measure-angle') */}
+              {activeTool === 'measure-angle' && points.map(pt => {
+                const conns = []
+                segments.forEach(s => {
+                  if (s.p1Id === pt.id) conns.push(s.p2Id)
+                  else if (s.p2Id === pt.id) conns.push(s.p1Id)
+                })
+                lines.forEach(l => {
+                  if (l.p1Id === pt.id) conns.push(l.p2Id)
+                  else if (l.p2Id === pt.id) conns.push(l.p1Id)
+                })
+                rays.forEach(r => {
+                  if (r.p1Id === pt.id) conns.push(r.p2Id)
+                  else if (r.p2Id === pt.id) conns.push(r.p1Id)
+                })
+                const uniqueConns = Array.from(new Set(conns))
+                
+                if (uniqueConns.length === 2) {
+                  const pA = getPt(uniqueConns[0])
+                  const pB = getPt(uniqueConns[1])
+                  if (pA && pB) {
+                    const dxA = pA.x - pt.x
+                    const dyA = pA.y - pt.y
+                    const dxB = pB.x - pt.x
+                    const dyB = pB.y - pt.y
+                    const lenA = Math.hypot(dxA, dyA)
+                    const lenB = Math.hypot(dxB, dyB)
+                    if (lenA > 0 && lenB > 0) {
+                      const cosVal = (dxA * dxB + dyA * dyB) / (lenA * lenB)
+                      const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+                      
+                      const uxA = dxA / lenA, uyA = dyA / lenA
+                      const uxB = dxB / lenB, uyB = dyB / lenB
+                      let bx = uxA + uxB
+                      let by = uyA + uyB
+                      let lenBisect = Math.hypot(bx, by)
+                      if (lenBisect < 0.01) {
+                        bx = -uyA
+                        by = uxA
+                        lenBisect = 1
+                      }
+                      const ox = (bx / lenBisect) * 24
+                      const oy = (by / lenBisect) * 24
+                      
+                      return (
+                        <g key={`ang-${pt.id}`}>
+                          <path
+                            d={`M ${pt.x + uxA * 15} ${pt.y + uyA * 15} Q ${pt.x + (bx/lenBisect)*15} ${pt.y + (by/lenBisect)*15} ${pt.x + uxB * 15} ${pt.y + uyB * 15}`}
+                            fill="none"
+                            stroke="var(--clr-accent, #4caf50)"
+                            strokeWidth="1.5"
+                            opacity="0.6"
+                          />
+                          <rect
+                            x={pt.x + ox - 18}
+                            y={pt.y + oy - 8}
+                            width="36"
+                            height="16"
+                            rx="3"
+                            fill="var(--clr-bg, #0f0f11)"
+                            stroke="var(--clr-accent, #4caf50)"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={pt.x + ox}
+                            y={pt.y + oy + 4}
+                            fill="var(--clr-accent, #4caf50)"
+                            fontSize="9"
+                            fontWeight="bold"
+                            textAnchor="middle"
+                            style={{ userSelect: 'none' }}
+                          >
+                            {Math.round(angle)}°
+                          </text>
+                        </g>
+                      )
+                    }
+                  }
+                }
+                return null
+              })}
             </svg>
+
+            {/* Render Floating Particles */}
+            {particles.map(p => (
+              <div
+                key={p.id}
+                style={{
+                  position: 'absolute',
+                  left: p.x,
+                  top: p.y,
+                  pointerEvents: 'none',
+                  fontSize: `${p.size}px`,
+                  opacity: p.alpha,
+                  transform: 'translate(-50%, -50%)',
+                  userSelect: 'none',
+                  transition: 'opacity 0.05s linear'
+                }}
+              >
+                {p.emoji}
+              </div>
+            ))}
           </div>
+
+          {/* Multiple Choice Question Section */}
+          {currentActivity.question && (
+            <div style={{
+              margin: '0 auto 1.5rem',
+              maxWidth: '500px',
+              background: 'var(--clr-surface, #1d1d21)',
+              border: '1px solid var(--clr-border, #444)',
+              borderRadius: '8px',
+              padding: '1rem',
+              textAlign: 'left'
+            }}>
+              <p style={{ margin: '0 0 0.75rem', fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--clr-text)' }}>
+                ❓ {currentActivity.question}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                {currentActivity.options.map(opt => (
+                  <label
+                    key={opt}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '6px',
+                      background: selectedOption === opt ? 'rgba(76, 175, 80, 0.12)' : 'transparent',
+                      border: selectedOption === opt ? '1px solid var(--clr-accent, #4caf50)' : '1px solid var(--clr-border, #444)',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      color: 'var(--clr-text)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="activity-quiz"
+                      value={opt}
+                      checked={selectedOption === opt}
+                      onChange={() => setSelectedOption(opt)}
+                      style={{ cursor: 'pointer', accentColor: 'var(--clr-accent, #4caf50)' }}
+                    />
+                    {opt}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Validation Feedback Box */}
+          {validationFeedback.status && (
+            <div style={{
+              margin: '0 auto 1.5rem',
+              maxWidth: '500px',
+              padding: '0.75rem 1rem',
+              borderRadius: '6px',
+              background: validationFeedback.status === 'success' ? 'rgba(76, 175, 80, 0.12)' : 'rgba(244, 67, 54, 0.12)',
+              border: validationFeedback.status === 'success' ? '1px solid var(--clr-accent, #4caf50)' : '1px solid var(--clr-error, #f44336)',
+              color: validationFeedback.status === 'success' ? '#81c784' : '#e57373',
+              fontSize: '0.92rem',
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              textAlign: 'left'
+            }}>
+              <span>{validationFeedback.status === 'success' ? '🎉' : '❌'}</span>
+              <span>{validationFeedback.message}</span>
+            </div>
+          )}
+
+          {/* Hint Box Section */}
+          {currentActivity.hint && (
+            <div style={{ margin: '0 auto 1.5rem', maxWidth: '500px', textAlign: 'left' }}>
+              <button
+                type="button"
+                onClick={() => setShowHint(h => !h)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--clr-accent, #4caf50)',
+                  color: 'var(--clr-accent, #4caf50)',
+                  padding: '5px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+              >
+                💡 {showHint ? 'Hide Hint' : 'Show Hint'}
+              </button>
+              {showHint && (
+                <div style={{
+                  marginTop: '0.5rem',
+                  background: 'rgba(255, 235, 59, 0.08)',
+                  border: '1px solid rgba(255, 235, 59, 0.25)',
+                  color: '#fff9c4',
+                  borderRadius: '6px',
+                  padding: '0.75rem',
+                  fontSize: '0.88rem',
+                  lineHeight: '1.45',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}>
+                  {currentActivity.hint}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              {currentActivityIndex > 0 && (
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={handleBackToHome}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'transparent',
+                  color: 'var(--clr-text-soft, #aaa)',
+                  border: '1px solid var(--clr-border, #444)',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Go to Home Dashboard"
+              >
+                🏠 Dashboard
+              </button>
+
+              {currentActivityIndex > 0 ? (
                 <button 
                   type="button"
-                  onClick={() => setCurrentActivityIndex(0)}
+                  onClick={() => setCurrentActivityIndex(n => n - 1)}
                   className="back-button"
-                  style={{ float: 'none', margin: 0, padding: '6px 12px', fontSize: '0.85rem' }}
+                  style={{ float: 'none', margin: 0, padding: '8px 12px', fontSize: '0.85rem', background: 'var(--clr-border, #333)', color: 'var(--clr-text)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
                 >
                   ← Previous Activity
                 </button>
+              ) : (
+                currentChapterId > 1 && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const prevCh = chapters.find(c => c.chapter_id === currentChapterId - 1)
+                      setCurrentChapterId(currentChapterId - 1)
+                      setCurrentActivityIndex(prevCh.activities.length - 1)
+                    }}
+                    className="back-button"
+                    style={{ float: 'none', margin: 0, padding: '8px 12px', fontSize: '0.85rem', background: 'var(--clr-border, #333)', color: 'var(--clr-text)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    ← Previous Chapter
+                  </button>
+                )
               )}
               
               <button
                 type="button"
-                onClick={() => {
-                  const actId = currentActivity.activity_id
-                  let nextCompleted
-                  if (completedActivities.includes(actId)) {
-                    nextCompleted = completedActivities.filter(id => id !== actId)
-                  } else {
-                    nextCompleted = [...completedActivities, actId]
-                  }
-                  setCompletedActivities(nextCompleted)
-                  try {
-                    localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
-                  } catch {}
-                }}
+                onClick={handleCheckDrawing}
                 style={{
                   padding: '8px 16px',
                   borderRadius: '6px',
-                  background: completedActivities.includes(currentActivity.activity_id) ? 'var(--clr-border, #333)' : 'var(--clr-accent, #4caf50)',
+                  background: 'var(--clr-accent, #4caf50)',
                   color: '#fff',
                   border: 'none',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
-                  fontWeight: '600'
+                  fontWeight: '600',
+                  boxShadow: '0 2px 4px rgba(76, 175, 80, 0.2)',
+                  transition: 'opacity 0.2s'
                 }}
               >
-                {completedActivities.includes(currentActivity.activity_id) ? '✓ Completed (Undo)' : 'Mock Complete'}
+                🔍 Check Drawing
               </button>
             </div>
 
@@ -50220,7 +50921,7 @@ function GeometryApp({ onBack }) {
                   Next Activity →
                 </button>
               ) : (
-                currentChapterId < chapters.length && (
+                currentChapterId < chapters.length ? (
                   <button 
                     type="button"
                     onClick={() => {
@@ -50230,6 +50931,14 @@ function GeometryApp({ onBack }) {
                     style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--clr-accent, #4caf50)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}
                   >
                     Next Chapter →
+                  </button>
+                ) : (
+                  <button 
+                    type="button"
+                    onClick={handleBackToHome}
+                    style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--clr-accent, #4caf50)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(76, 175, 80, 0.2)' }}
+                  >
+                    🎉 Complete & Go Home →
                   </button>
                 )
               )}
