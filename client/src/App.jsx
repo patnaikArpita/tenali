@@ -49620,13 +49620,37 @@ function GeometryApp({ onBack }) {
     if (onBack) onBack()
   }
 
+  // Validation and hint feedback state
+  const [validationFeedback, setValidationFeedback] = useState({ status: null, message: '' })
+  const [particles, setParticles] = useState([])
+  const [selectedOption, setSelectedOption] = useState(null)
+  const [showHint, setShowHint] = useState(false)
+
   // Reset drawing canvas and default the active tool when activity or chapter changes
   useEffect(() => {
-    setPoints([])
+    let initialPoints = []
+    if (currentActivity) {
+      if (currentActivity.activity_id === 'act_3_1') {
+        initialPoints = [
+          { id: 'A', x: 140, y: 150, color: '#4caf50', isPreplaced: true }, // Green
+          { id: 'B', x: 360, y: 150, color: '#f44336', isPreplaced: true }  // Red
+        ]
+      } else if (currentActivity.activity_id === 'act_4_1') {
+        initialPoints = [
+          { id: 'A', x: 160, y: 150, color: '#4caf50', isPreplaced: true }, // Green
+          { id: 'B', x: 320, y: 150, color: '#ff9800', isPreplaced: true }  // Orange
+        ]
+      }
+    }
+    
+    setPoints(initialPoints)
     setSegments([])
     setLines([])
     setRays([])
     setSelectedPoints([])
+    setValidationFeedback({ status: null, message: '' })
+    setSelectedOption(null)
+    setShowHint(false)
     
     if (currentActivity && currentActivity.allowed_tools && currentActivity.allowed_tools.length > 0) {
       setActiveTool(currentActivity.allowed_tools[0])
@@ -49742,6 +49766,302 @@ function GeometryApp({ onBack }) {
       y1: p1.y,
       x2: p2.x + ux * 1000,
       y2: p2.y + uy * 1000
+    }
+  }
+
+  // Particle physics update loop
+  useEffect(() => {
+    if (particles.length === 0) return
+    const frameId = requestAnimationFrame(() => {
+      setParticles(prev => prev
+        .map(p => ({
+          ...p,
+          x: p.x + p.vx,
+          y: p.y + p.vy,
+          vy: p.vy + 0.1, // gravity/drift
+          alpha: p.alpha - 0.02
+        }))
+        .filter(p => p.alpha > 0)
+      )
+    })
+    return () => cancelAnimationFrame(frameId)
+  }, [particles])
+
+  const triggerSuccessAnimation = () => {
+    const emojis = ['🎉', '✨', '🌟', '🥳', '👏', '💖', '🚀', '🌈', '🎓', '🔮']
+    const newParticles = Array.from({ length: 20 }).map(() => ({
+      id: Math.random(),
+      emoji: emojis[Math.floor(Math.random() * emojis.length)],
+      x: 100 + Math.random() * 300,
+      y: 260,
+      vx: (Math.random() - 0.5) * 4,
+      vy: -3 - Math.random() * 4,
+      alpha: 1,
+      size: 16 + Math.random() * 16
+    }))
+    setParticles(newParticles)
+  }
+
+  const handleCheckDrawing = () => {
+    const actId = currentActivity.activity_id
+    let feedback = { status: 'error', message: 'Invalid activity validation.' }
+    
+    if (actId === 'act_1_1') {
+      const pt = points.find(p => Math.hypot(p.x - 250, p.y - 150) < 5)
+      if (!pt) {
+        feedback = { status: 'error', message: 'No point is close enough to the center of the target (250, 150).' }
+      } else {
+        feedback = { status: 'success', message: 'Perfect hit! You placed a point right on the target center!' }
+      }
+    } else if (actId === 'act_1_2') {
+      const pt = points.find(p => p.id !== 'A' && p.id !== 'B' && Math.hypot(p.x - 250, p.y - 150) < 5)
+      if (!pt) {
+        feedback = { status: 'error', message: 'No point found at the midpoint of A and B (250, 150).' }
+      } else {
+        feedback = { status: 'success', message: 'Awesome job! You found the midpoint!' }
+      }
+    } else if (actId === 'act_2_1') {
+      const l = lines.find(line => {
+        const p1 = points.find(p => p.id === line.p1Id)
+        const p2 = points.find(p => p.id === line.p2Id)
+        if (!p1 || !p2) return false
+        return (Math.hypot(p1.x - 150, p1.y - 200) < 6 && Math.hypot(p2.x - 350, p2.y - 100) < 6) ||
+               (Math.hypot(p1.x - 350, p1.y - 100) < 6 && Math.hypot(p2.x - 150, p2.y - 200) < 6)
+      })
+      if (!l) {
+        feedback = { status: 'error', message: 'Draw an infinite line passing through the points close to (150, 200) and (350, 100).' }
+      } else {
+        feedback = { status: 'success', message: 'Brilliant! You drew a line that extends to infinity in both directions!' }
+      }
+    } else if (actId === 'act_3_1') {
+      const seg = segments.find(s => (s.p1Id === 'A' && s.p2Id === 'B') || (s.p1Id === 'B' && s.p2Id === 'A'))
+      if (!seg) {
+        feedback = { status: 'error', message: 'Please draw a line segment connecting Point A and Point B.' }
+      } else {
+        feedback = { status: 'success', message: 'Great connection! You bridged the islands!' }
+      }
+    } else if (actId === 'act_3_2') {
+      const hub = points.find(p => p.id !== 'A' && p.id !== 'B' && Math.hypot(p.x - 250, p.y - 150) < 6)
+      if (!hub) {
+        feedback = { status: 'error', message: 'Place a central hub point at coordinates (250, 150).' }
+      } else {
+        const segA = segments.some(s => (s.p1Id === hub.id && s.p2Id === 'A') || (s.p1Id === 'A' && s.p2Id === hub.id))
+        const segB = segments.some(s => (s.p1Id === hub.id && s.p2Id === 'B') || (s.p1Id === 'B' && s.p2Id === hub.id))
+        if (!segA || !segB) {
+          feedback = { status: 'error', message: 'Draw two segments: one from the hub to Point A, and one from the hub to Point B.' }
+        } else if (selectedOption !== currentActivity.correct_answer) {
+          feedback = { status: 'error', message: 'Please select the correct answer for the question below.' }
+        } else {
+          feedback = { status: 'success', message: 'Excellent! The total length is indeed 11.0 units.' }
+        }
+      }
+    } else if (actId === 'act_4_1') {
+      const ray = rays.find(r => r.p1Id === 'A' && r.p2Id === 'B')
+      if (!ray) {
+        feedback = { status: 'error', message: 'Draw a ray starting at A and passing through B.' }
+      } else {
+        feedback = { status: 'success', message: 'Splendid! You drew a ray pointing towards the east!' }
+      }
+    } else if (actId === 'act_5_1') {
+      const pV = points.find(p => Math.hypot(p.x - 200, p.y - 200) < 6)
+      const pA = points.find(p => Math.hypot(p.x - 200, p.y - 100) < 6)
+      const pB = points.find(p => Math.hypot(p.x - 300, p.y - 200) < 6)
+      if (!pV || !pA || !pB) {
+        feedback = { status: 'error', message: 'Place three points at (200, 200), (200, 100), and (300, 200).' }
+      } else {
+        const seg1 = segments.some(s => (s.p1Id === pV.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pV.id))
+        const seg2 = segments.some(s => (s.p1Id === pV.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pV.id))
+        if (!seg1 || !seg2) {
+          feedback = { status: 'error', message: 'Draw two segments to form the corner: V to A, and V to B.' }
+        } else {
+          feedback = { status: 'success', message: 'Superb! You created a perfect 90° right angle!' }
+        }
+      }
+    } else if (actId === 'act_5_2') {
+      let foundObtuse = false
+      for (let pt of points) {
+        const conns = segments.filter(s => s.p1Id === pt.id || s.p2Id === pt.id)
+        if (conns.length === 2) {
+          const o1 = conns[0].p1Id === pt.id ? conns[0].p2Id : conns[0].p1Id
+          const o2 = conns[1].p1Id === pt.id ? conns[1].p2Id : conns[1].p1Id
+          const p1 = getPt(o1)
+          const p2 = getPt(o2)
+          if (p1 && p2) {
+            const dx1 = p1.x - pt.x
+            const dy1 = p1.y - pt.y
+            const dx2 = p2.x - pt.x
+            const dy2 = p2.y - pt.y
+            const len1 = Math.hypot(dx1, dy1)
+            const len2 = Math.hypot(dx2, dy2)
+            if (len1 > 0 && len2 > 0) {
+              const cosVal = (dx1 * dx2 + dy1 * dy2) / (len1 * len2)
+              const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+              if (angle > 92 && angle < 178) {
+                foundObtuse = true
+                break
+              }
+            }
+          }
+        }
+      }
+      if (!foundObtuse) {
+        feedback = { status: 'error', message: 'Could not find two segments sharing a vertex that form an angle between 90° and 180°.' }
+      } else {
+        feedback = { status: 'success', message: 'Outstanding! You made an obtuse angle.' }
+      }
+    } else if (actId === 'act_6_1') {
+      let foundTriangle = false
+      for (let i = 0; i < points.length; i++) {
+        for (let j = i + 1; j < points.length; j++) {
+          for (let k = j + 1; k < points.length; k++) {
+            const p1 = points[i].id
+            const p2 = points[j].id
+            const p3 = points[k].id
+            const s1 = segments.some(s => (s.p1Id === p1 && s.p2Id === p2) || (s.p1Id === p2 && s.p2Id === p1))
+            const s2 = segments.some(s => (s.p1Id === p2 && s.p2Id === p3) || (s.p1Id === p3 && s.p2Id === p2))
+            const s3 = segments.some(s => (s.p1Id === p3 && s.p2Id === p1) || (s.p1Id === p1 && s.p2Id === p3))
+            if (s1 && s2 && s3) {
+              foundTriangle = true
+              break
+            }
+          }
+        }
+      }
+      if (!foundTriangle) {
+        feedback = { status: 'error', message: 'Please connect 3 points with 3 segments to form a closed triangle.' }
+      } else {
+        feedback = { status: 'success', message: 'Incredible! You have built a triangle!' }
+      }
+    } else if (actId === 'act_7_1') {
+      const v1 = points.find(p => Math.hypot(p.x - 250, p.y - 80) < 6)
+      if (!v1) {
+        feedback = { status: 'error', message: 'Place one of the vertices close to (250, 80).' }
+      } else {
+        let validEquilateral = false
+        for (let i = 0; i < points.length; i++) {
+          for (let j = i + 1; j < points.length; j++) {
+            const pA = points[i]
+            const pB = points[j]
+            if (pA.id === v1.id || pB.id === v1.id) {
+              const thirdPts = points.filter(p => p.id !== pA.id && p.id !== pB.id)
+              for (let pC of thirdPts) {
+                const s1 = segments.some(s => (s.p1Id === pA.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pA.id))
+                const s2 = segments.some(s => (s.p1Id === pB.id && s.p2Id === pC.id) || (s.p1Id === pC.id && s.p2Id === pB.id))
+                const s3 = segments.some(s => (s.p1Id === pC.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pC.id))
+                if (s1 && s2 && s3) {
+                  const d1 = Math.hypot(pA.x - pB.x, pA.y - pB.y)
+                  const d2 = Math.hypot(pB.x - pC.x, pB.y - pC.y)
+                  const d3 = Math.hypot(pC.x - pA.x, pC.y - pA.y)
+                  if (Math.abs(d1 - 120) < 6 && Math.abs(d2 - 120) < 6 && Math.abs(d3 - 120) < 6) {
+                    validEquilateral = true
+                    break
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (!validEquilateral) {
+          feedback = { status: 'error', message: 'Draw a closed triangle with one vertex near (250, 80) and all sides exactly 6 units (120 pixels) long.' }
+        } else {
+          feedback = { status: 'success', message: 'Majestic! That is a perfect equilateral triangle!' }
+        }
+      }
+    } else if (actId === 'act_8_1') {
+      let foundSquare = false
+      for (let a = 0; a < points.length; a++) {
+        for (let b = 0; b < points.length; b++) {
+          if (a === b) continue
+          for (let c = 0; c < points.length; c++) {
+            if (c === a || c === b) continue
+            for (let d = 0; d < points.length; d++) {
+              if (d === a || d === b || d === c) continue
+              
+              const pA = points[a], pB = points[b], pC = points[c], pD = points[d]
+              const sab = segments.some(s => (s.p1Id === pA.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pA.id))
+              const sbc = segments.some(s => (s.p1Id === pB.id && s.p2Id === pC.id) || (s.p1Id === pC.id && s.p2Id === pB.id))
+              const scd = segments.some(s => (s.p1Id === pC.id && s.p2Id === pD.id) || (s.p1Id === pD.id && s.p2Id === pC.id))
+              const sda = segments.some(s => (s.p1Id === pD.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pD.id))
+              
+              if (sab && sbc && scd && sda) {
+                const dab = Math.hypot(pA.x - pB.x, pA.y - pB.y)
+                const dbc = Math.hypot(pB.x - pC.x, pB.y - pC.y)
+                const dcd = Math.hypot(pC.x - pD.x, pC.y - pD.y)
+                const dda = Math.hypot(pD.x - pA.x, pD.y - pA.y)
+                const dac = Math.hypot(pA.x - pC.x, pA.y - pC.y)
+                
+                if (Math.abs(dab - 100) < 6 && Math.abs(dbc - 100) < 6 && Math.abs(dcd - 100) < 6 && Math.abs(dda - 100) < 6) {
+                  if (Math.abs(dab*dab + dbc*dbc - dac*dac) < 1000) {
+                    foundSquare = true
+                    break
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      if (!foundSquare) {
+        feedback = { status: 'error', message: 'Please draw a perfect 5x5 units (100x100 pixels) square connected by segments.' }
+      } else {
+        feedback = { status: 'success', message: 'Incredible square footing! You are a master mason!' }
+      }
+    } else if (actId === 'act_8_2') {
+      let foundRectangle = false
+      for (let a = 0; a < points.length; a++) {
+        for (let b = 0; b < points.length; b++) {
+          if (a === b) continue
+          for (let c = 0; c < points.length; c++) {
+            if (c === a || c === b) continue
+            for (let d = 0; d < points.length; d++) {
+              if (d === a || d === b || d === c) continue
+              
+              const pA = points[a], pB = points[b], pC = points[c], pD = points[d]
+              const sab = segments.some(s => (s.p1Id === pA.id && s.p2Id === pB.id) || (s.p1Id === pB.id && s.p2Id === pA.id))
+              const sbc = segments.some(s => (s.p1Id === pB.id && s.p2Id === pC.id) || (s.p1Id === pC.id && s.p2Id === pB.id))
+              const scd = segments.some(s => (s.p1Id === pC.id && s.p2Id === pD.id) || (s.p1Id === pD.id && s.p2Id === pC.id))
+              const sda = segments.some(s => (s.p1Id === pD.id && s.p2Id === pA.id) || (s.p1Id === pA.id && s.p2Id === pD.id))
+              
+              if (sab && sbc && scd && sda) {
+                const dab = Math.hypot(pA.x - pB.x, pA.y - pB.y)
+                const dbc = Math.hypot(pB.x - pC.x, pB.y - pC.y)
+                const dcd = Math.hypot(pC.x - pD.x, pC.y - pD.y)
+                const dda = Math.hypot(pD.x - pA.x, pD.y - pA.y)
+                const dac = Math.hypot(pA.x - pC.x, pA.y - pC.y)
+                
+                const match1 = (Math.abs(dab - 160) < 6 && Math.abs(dbc - 80) < 6 && Math.abs(dcd - 160) < 6 && Math.abs(dda - 80) < 6)
+                const match2 = (Math.abs(dab - 80) < 6 && Math.abs(dbc - 160) < 6 && Math.abs(dcd - 80) < 6 && Math.abs(dda - 160) < 6)
+                
+                if (match1 || match2) {
+                  if (Math.abs(dab*dab + dbc*dbc - dac*dac) < 1000) {
+                    foundRectangle = true
+                    break
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      if (!foundRectangle) {
+        feedback = { status: 'error', message: 'Please draw a rectangle with width 160 pixels and height 80 pixels.' }
+      } else if (selectedOption !== currentActivity.correct_answer) {
+        feedback = { status: 'error', message: 'Please select the correct answer for the question below.' }
+      } else {
+        feedback = { status: 'success', message: 'Correct! The area of the rectangle is indeed 32.0 sq units!' }
+      }
+    }
+    
+    setValidationFeedback(feedback)
+    if (feedback.status === 'success') {
+      triggerSuccessAnimation()
+      if (!completedActivities.includes(actId)) {
+        const nextCompleted = [...completedActivities, actId]
+        setCompletedActivities(nextCompleted)
+        try {
+          localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
+        } catch {}
+      }
     }
   }
 
@@ -49980,7 +50300,7 @@ function GeometryApp({ onBack }) {
             flexWrap: 'wrap'
           }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 'bold', marginRight: '0.5rem', color: 'var(--clr-text-soft)' }}>Drawing Tools:</span>
-            {currentActivity.allowed_tools.map(tool => {
+             {currentActivity.allowed_tools.map(tool => {
               const isActive = activeTool === tool
               let label = tool.toUpperCase()
               let icon = '✏️'
@@ -49988,6 +50308,8 @@ function GeometryApp({ onBack }) {
               else if (tool === 'line') { icon = '↔️'; label = 'Line' }
               else if (tool === 'segment') { icon = '➖'; label = 'Segment' }
               else if (tool === 'ray') { icon = '➡️'; label = 'Ray' }
+              else if (tool === 'measure-length') { icon = '📏'; label = 'Ruler' }
+              else if (tool === 'measure-angle') { icon = '📐'; label = 'Protractor' }
               
               return (
                 <button
@@ -50019,11 +50341,26 @@ function GeometryApp({ onBack }) {
             <button
               type="button"
               onClick={() => {
-                setPoints([])
+                let initialPoints = []
+                if (currentActivity) {
+                  if (currentActivity.activity_id === 'act_3_1') {
+                    initialPoints = [
+                      { id: 'A', x: 140, y: 150, color: '#4caf50', isPreplaced: true },
+                      { id: 'B', x: 360, y: 150, color: '#f44336', isPreplaced: true }
+                    ]
+                  } else if (currentActivity.activity_id === 'act_4_1') {
+                    initialPoints = [
+                      { id: 'A', x: 160, y: 150, color: '#4caf50', isPreplaced: true },
+                      { id: 'B', x: 320, y: 150, color: '#ff9800', isPreplaced: true }
+                    ]
+                  }
+                }
+                setPoints(initialPoints)
                 setSegments([])
                 setLines([])
                 setRays([])
                 setSelectedPoints([])
+                setValidationFeedback({ status: null, message: '' })
               }}
               style={{
                 padding: '6px 12px',
@@ -50068,6 +50405,28 @@ function GeometryApp({ onBack }) {
               
               {/* Grid Background */}
               <rect width="500" height="300" fill="url(#canvas-grid)" />
+              
+              {/* Custom background visual aids */}
+              {currentActivity && currentActivity.activity_id === 'act_1_1' && (
+                <g opacity="0.3">
+                  <circle cx="250" cy="150" r="60" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
+                  <circle cx="250" cy="150" r="40" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
+                  <circle cx="250" cy="150" r="20" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" />
+                  <circle cx="250" cy="150" r="4" fill="var(--clr-accent, #4caf50)" />
+                </g>
+              )}
+              {currentActivity && currentActivity.activity_id === 'act_3_1' && (
+                <g opacity="0.3">
+                  {/* Island A */}
+                  <circle cx="140" cy="150" r="40" fill="#4caf50" />
+                  <circle cx="130" cy="140" r="25" fill="#8bc34a" />
+                  {/* Island B */}
+                  <circle cx="360" cy="150" r="40" fill="#f44336" />
+                  <circle cx="370" cy="160" r="25" fill="#ff5722" />
+                  <text x="140" y="90" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island A</text>
+                  <text x="360" y="90" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island B</text>
+                </g>
+              )}
               
               {/* Render Lines */}
               {lines.map(line => {
@@ -50131,16 +50490,17 @@ function GeometryApp({ onBack }) {
               {/* Render Points */}
               {points.map(pt => {
                 const isSelected = selectedPoints.includes(pt.id)
+                const ptColor = pt.color || 'var(--clr-accent, #4caf50)'
                 return (
                   <g key={pt.id} style={{ cursor: 'pointer' }}>
                     {isSelected && (
-                      <circle cx={pt.x} cy={pt.y} r="10" fill="var(--clr-accent, #4caf50)" opacity="0.3" />
+                      <circle cx={pt.x} cy={pt.y} r="10" fill={ptColor} opacity="0.3" />
                     )}
                     <circle
                       cx={pt.x}
                       cy={pt.y}
                       r="5"
-                      fill="var(--clr-accent, #4caf50)"
+                      fill={ptColor}
                       stroke="#fff"
                       strokeWidth="1.5"
                       onClick={(e) => {
@@ -50163,8 +50523,264 @@ function GeometryApp({ onBack }) {
                   </g>
                 )
               })}
+
+              {/* Ruler Overlay (activeTool === 'measure-length') */}
+              {activeTool === 'measure-length' && segments.map(seg => {
+                const p1 = getPt(seg.p1Id)
+                const p2 = getPt(seg.p2Id)
+                if (!p1 || !p2) return null
+                const distPx = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+                const distGrid = distPx / 20
+                const midX = (p1.x + p2.x) / 2
+                const midY = (p1.y + p2.y) / 2
+                const dx = p2.x - p1.x
+                const dy = p2.y - p1.y
+                const len = Math.hypot(dx, dy)
+                let ox = 0, oy = 0
+                if (len > 0) {
+                  ox = -(dy / len) * 14
+                  oy = (dx / len) * 14
+                }
+                return (
+                  <g key={`len-${seg.id}`}>
+                    <rect
+                      x={midX + ox - 20}
+                      y={midY + oy - 9}
+                      width="40"
+                      height="18"
+                      rx="4"
+                      fill="var(--clr-bg, #0f0f11)"
+                      stroke="var(--clr-accent, #4caf50)"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={midX + ox}
+                      y={midY + oy + 4}
+                      fill="var(--clr-accent, #4caf50)"
+                      fontSize="10"
+                      fontWeight="bold"
+                      textAnchor="middle"
+                      style={{ userSelect: 'none' }}
+                    >
+                      {distGrid.toFixed(1)}
+                    </text>
+                  </g>
+                )
+              })}
+
+              {/* Protractor Overlay (activeTool === 'measure-angle') */}
+              {activeTool === 'measure-angle' && points.map(pt => {
+                const conns = []
+                segments.forEach(s => {
+                  if (s.p1Id === pt.id) conns.push(s.p2Id)
+                  else if (s.p2Id === pt.id) conns.push(s.p1Id)
+                })
+                lines.forEach(l => {
+                  if (l.p1Id === pt.id) conns.push(l.p2Id)
+                  else if (l.p2Id === pt.id) conns.push(l.p1Id)
+                })
+                rays.forEach(r => {
+                  if (r.p1Id === pt.id) conns.push(r.p2Id)
+                  else if (r.p2Id === pt.id) conns.push(r.p1Id)
+                })
+                const uniqueConns = Array.from(new Set(conns))
+                
+                if (uniqueConns.length === 2) {
+                  const pA = getPt(uniqueConns[0])
+                  const pB = getPt(uniqueConns[1])
+                  if (pA && pB) {
+                    const dxA = pA.x - pt.x
+                    const dyA = pA.y - pt.y
+                    const dxB = pB.x - pt.x
+                    const dyB = pB.y - pt.y
+                    const lenA = Math.hypot(dxA, dyA)
+                    const lenB = Math.hypot(dxB, dyB)
+                    if (lenA > 0 && lenB > 0) {
+                      const cosVal = (dxA * dxB + dyA * dyB) / (lenA * lenB)
+                      const angle = Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI
+                      
+                      const uxA = dxA / lenA, uyA = dyA / lenA
+                      const uxB = dxB / lenB, uyB = dyB / lenB
+                      let bx = uxA + uxB
+                      let by = uyA + uyB
+                      let lenBisect = Math.hypot(bx, by)
+                      if (lenBisect < 0.01) {
+                        bx = -uyA
+                        by = uxA
+                        lenBisect = 1
+                      }
+                      const ox = (bx / lenBisect) * 24
+                      const oy = (by / lenBisect) * 24
+                      
+                      return (
+                        <g key={`ang-${pt.id}`}>
+                          <path
+                            d={`M ${pt.x + uxA * 15} ${pt.y + uyA * 15} Q ${pt.x + (bx/lenBisect)*15} ${pt.y + (by/lenBisect)*15} ${pt.x + uxB * 15} ${pt.y + uyB * 15}`}
+                            fill="none"
+                            stroke="var(--clr-accent, #4caf50)"
+                            strokeWidth="1.5"
+                            opacity="0.6"
+                          />
+                          <rect
+                            x={pt.x + ox - 18}
+                            y={pt.y + oy - 8}
+                            width="36"
+                            height="16"
+                            rx="3"
+                            fill="var(--clr-bg, #0f0f11)"
+                            stroke="var(--clr-accent, #4caf50)"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={pt.x + ox}
+                            y={pt.y + oy + 4}
+                            fill="var(--clr-accent, #4caf50)"
+                            fontSize="9"
+                            fontWeight="bold"
+                            textAnchor="middle"
+                            style={{ userSelect: 'none' }}
+                          >
+                            {Math.round(angle)}°
+                          </text>
+                        </g>
+                      )
+                    }
+                  }
+                }
+                return null
+              })}
             </svg>
+
+            {/* Render Floating Particles */}
+            {particles.map(p => (
+              <div
+                key={p.id}
+                style={{
+                  position: 'absolute',
+                  left: p.x,
+                  top: p.y,
+                  pointerEvents: 'none',
+                  fontSize: `${p.size}px`,
+                  opacity: p.alpha,
+                  transform: 'translate(-50%, -50%)',
+                  userSelect: 'none',
+                  transition: 'opacity 0.05s linear'
+                }}
+              >
+                {p.emoji}
+              </div>
+            ))}
           </div>
+
+          {/* Multiple Choice Question Section */}
+          {currentActivity.question && (
+            <div style={{
+              margin: '0 auto 1.5rem',
+              maxWidth: '500px',
+              background: 'var(--clr-surface, #1d1d21)',
+              border: '1px solid var(--clr-border, #444)',
+              borderRadius: '8px',
+              padding: '1rem',
+              textAlign: 'left'
+            }}>
+              <p style={{ margin: '0 0 0.75rem', fontWeight: 'bold', fontSize: '0.95rem', color: 'var(--clr-text)' }}>
+                ❓ {currentActivity.question}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                {currentActivity.options.map(opt => (
+                  <label
+                    key={opt}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '6px',
+                      background: selectedOption === opt ? 'rgba(76, 175, 80, 0.12)' : 'transparent',
+                      border: selectedOption === opt ? '1px solid var(--clr-accent, #4caf50)' : '1px solid var(--clr-border, #444)',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      color: 'var(--clr-text)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="activity-quiz"
+                      value={opt}
+                      checked={selectedOption === opt}
+                      onChange={() => setSelectedOption(opt)}
+                      style={{ cursor: 'pointer', accentColor: 'var(--clr-accent, #4caf50)' }}
+                    />
+                    {opt}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Validation Feedback Box */}
+          {validationFeedback.status && (
+            <div style={{
+              margin: '0 auto 1.5rem',
+              maxWidth: '500px',
+              padding: '0.75rem 1rem',
+              borderRadius: '6px',
+              background: validationFeedback.status === 'success' ? 'rgba(76, 175, 80, 0.12)' : 'rgba(244, 67, 54, 0.12)',
+              border: validationFeedback.status === 'success' ? '1px solid var(--clr-accent, #4caf50)' : '1px solid var(--clr-error, #f44336)',
+              color: validationFeedback.status === 'success' ? '#81c784' : '#e57373',
+              fontSize: '0.92rem',
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              textAlign: 'left'
+            }}>
+              <span>{validationFeedback.status === 'success' ? '🎉' : '❌'}</span>
+              <span>{validationFeedback.message}</span>
+            </div>
+          )}
+
+          {/* Hint Box Section */}
+          {currentActivity.hint && (
+            <div style={{ margin: '0 auto 1.5rem', maxWidth: '500px', textAlign: 'left' }}>
+              <button
+                type="button"
+                onClick={() => setShowHint(h => !h)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--clr-accent, #4caf50)',
+                  color: 'var(--clr-accent, #4caf50)',
+                  padding: '5px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+              >
+                💡 {showHint ? 'Hide Hint' : 'Show Hint'}
+              </button>
+              {showHint && (
+                <div style={{
+                  marginTop: '0.5rem',
+                  background: 'rgba(255, 235, 59, 0.08)',
+                  border: '1px solid rgba(255, 235, 59, 0.25)',
+                  color: '#fff9c4',
+                  borderRadius: '6px',
+                  padding: '0.75rem',
+                  fontSize: '0.88rem',
+                  lineHeight: '1.45',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}>
+                  {currentActivity.hint}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -50172,7 +50788,7 @@ function GeometryApp({ onBack }) {
               {currentActivityIndex > 0 && (
                 <button 
                   type="button"
-                  onClick={() => setCurrentActivityIndex(0)}
+                  onClick={() => setCurrentActivityIndex(n => n - 1)}
                   className="back-button"
                   style={{ float: 'none', margin: 0, padding: '6px 12px', fontSize: '0.85rem' }}
                 >
@@ -50182,31 +50798,21 @@ function GeometryApp({ onBack }) {
               
               <button
                 type="button"
-                onClick={() => {
-                  const actId = currentActivity.activity_id
-                  let nextCompleted
-                  if (completedActivities.includes(actId)) {
-                    nextCompleted = completedActivities.filter(id => id !== actId)
-                  } else {
-                    nextCompleted = [...completedActivities, actId]
-                  }
-                  setCompletedActivities(nextCompleted)
-                  try {
-                    localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
-                  } catch {}
-                }}
+                onClick={handleCheckDrawing}
                 style={{
                   padding: '8px 16px',
                   borderRadius: '6px',
-                  background: completedActivities.includes(currentActivity.activity_id) ? 'var(--clr-border, #333)' : 'var(--clr-accent, #4caf50)',
+                  background: 'var(--clr-accent, #4caf50)',
                   color: '#fff',
                   border: 'none',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
-                  fontWeight: '600'
+                  fontWeight: '600',
+                  boxShadow: '0 2px 4px rgba(76, 175, 80, 0.2)',
+                  transition: 'opacity 0.2s'
                 }}
               >
-                {completedActivities.includes(currentActivity.activity_id) ? '✓ Completed (Undo)' : 'Mock Complete'}
+                🔍 Check Drawing
               </button>
             </div>
 
