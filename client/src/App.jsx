@@ -21,7 +21,7 @@
  * Progress persistence: Adaptive tables app saves current table progress in localStorage
  */
 
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo, Fragment } from 'react'
 import './App.css'
 
 // API base URL from environment variables (Vite)
@@ -35569,6 +35569,18 @@ function App() {
     )
   }
 
+  // Route: /geocraft → Kids Geometry Workspace
+  if (pathname === '/geocraft') {
+    return (
+      <>
+        <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+        <GeometryApp onBack={() => { window.location.href = '/' }} />
+      </>
+    )
+  }
+
   // Route: /tenth → Cambridge IGCSE index page (links to all 24 chapters)
   if (pathname === '/tenth') {
     return (
@@ -36047,6 +36059,7 @@ function App() {
     lineqgym: LinEqGymApp,         // LinearEquations-Gym — solve linear equations (MCQ)
     indicesgym: IndicesGymApp,     // Indices-Gym — index laws (MCQ)
     polygym: PolyGymApp,           // Polynomials Gym — arithmetic → monomial algebra (MCQ)
+    geocraft: GeometryApp
   }
 
   // Get the component to render (or null if mode not set)
@@ -36084,6 +36097,7 @@ function Home({ onSelect }) {
     { key: 'randommix', name: 'Random Mix', subtitle: 'Adaptive cross-topic quiz', color: 'featured' },
     { key: 'custom', name: 'Custom Lesson', subtitle: 'Build your own mixed quiz', color: 'featured' },
     { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' },
+    { key: 'geocraft', name: 'GeoCraft', subtitle: 'Geometry Game', color: 'featured' }
   ]
 
   // All regular quiz apps sorted alphabetically by name
@@ -49567,6 +49581,663 @@ function QuizLayout({ title, subtitle, onBack, children, timer }) {
       <p className="subtitle">{subtitle}</p>
       {children}
     </>
+  )
+}
+
+import geometryData from './geometry.json'
+
+/* ── Geometry Learning Game (GeoCraft) ────────────── */
+/**
+ * GeometryApp Component
+ * A simple, interactive geometry game tailored for children (ages 10-12).
+ */
+function GeometryApp({ onBack }) {
+  const [currentChapterId, setCurrentChapterId] = useState(1)
+  const [currentActivityIndex, setCurrentActivityIndex] = useState(0)
+  const [completedActivities, setCompletedActivities] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('tenali-geometry-completed') || '[]')
+    } catch {
+      return []
+    }
+  })
+
+  // Canvas Drawing States
+  const [points, setPoints] = useState([])
+  const [segments, setSegments] = useState([])
+  const [lines, setLines] = useState([])
+  const [rays, setRays] = useState([])
+  const [selectedPoints, setSelectedPoints] = useState([])
+  const [activeTool, setActiveTool] = useState('point')
+
+  const chapters = geometryData.chapters
+  const currentChapter = chapters.find(ch => ch.chapter_id === currentChapterId) || chapters[0]
+  const currentActivity = currentChapter.activities[currentActivityIndex]
+
+  const canvasRef = useRef(null)
+
+  const handleBackToHome = () => {
+    if (onBack) onBack()
+  }
+
+  // Reset drawing canvas and default the active tool when activity or chapter changes
+  useEffect(() => {
+    setPoints([])
+    setSegments([])
+    setLines([])
+    setRays([])
+    setSelectedPoints([])
+    
+    if (currentActivity && currentActivity.allowed_tools && currentActivity.allowed_tools.length > 0) {
+      setActiveTool(currentActivity.allowed_tools[0])
+    } else {
+      setActiveTool('point')
+    }
+  }, [currentChapterId, currentActivityIndex])
+
+  const isChapterCompleted = (chId) => {
+    const ch = chapters.find(c => c.chapter_id === chId)
+    if (!ch) return false
+    return ch.activities.every(act => completedActivities.includes(act.activity_id))
+  }
+
+  const handleCanvasClick = (e) => {
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const rawX = e.clientX - rect.left
+    const rawY = e.clientY - rect.top
+    
+    // Snap to grid (grid spacing 20px)
+    const gridSpacing = 20
+    const snapX = Math.round(rawX / gridSpacing) * gridSpacing
+    const snapY = Math.round(rawY / gridSpacing) * gridSpacing
+    
+    // Boundary checks (500x300 canvas size)
+    const x = Math.max(0, Math.min(500, snapX))
+    const y = Math.max(0, Math.min(300, snapY))
+    
+    const existingPoint = points.find(p => p.x === x && p.y === y)
+    
+    if (activeTool === 'point') {
+      if (!existingPoint) {
+        if (points.length >= 26) return // limit to A-Z
+        const newLabel = String.fromCharCode(65 + points.length)
+        setPoints([...points, { id: newLabel, x, y }])
+      }
+    } else {
+      // Connect tools (line, segment, ray)
+      if (existingPoint) {
+        handlePointSelection(existingPoint.id)
+      } else {
+        // Auto-create a point if clicked on empty space while drawing lines
+        if (points.length >= 26) return
+        const newLabel = String.fromCharCode(65 + points.length)
+        const newPt = { id: newLabel, x, y }
+        setPoints(prev => [...prev, newPt])
+        handlePointSelection(newLabel)
+      }
+    }
+  }
+
+  const handlePointSelection = (ptId) => {
+    if (selectedPoints.includes(ptId)) {
+      setSelectedPoints([]) // deselect
+      return
+    }
+    
+    if (selectedPoints.length === 0) {
+      setSelectedPoints([ptId])
+    } else {
+      const p1Id = selectedPoints[0]
+      const p2Id = ptId
+      if (p1Id === p2Id) return
+      
+      const newId = `${p1Id}${p2Id}`
+      
+      if (activeTool === 'segment') {
+        if (!segments.some(s => (s.p1Id === p1Id && s.p2Id === p2Id) || (s.p1Id === p2Id && s.p2Id === p1Id))) {
+          setSegments([...segments, { id: newId, p1Id, p2Id }])
+        }
+      } else if (activeTool === 'line') {
+        if (!lines.some(l => (l.p1Id === p1Id && l.p2Id === p2Id) || (l.p1Id === p2Id && l.p2Id === p1Id))) {
+          setLines([...lines, { id: newId, p1Id, p2Id }])
+        }
+      } else if (activeTool === 'ray') {
+        if (!rays.some(r => r.p1Id === p1Id && r.p2Id === p2Id)) {
+          setRays([...rays, { id: newId, p1Id, p2Id }])
+        }
+      }
+      setSelectedPoints([])
+    }
+  }
+
+  const getPt = (id) => points.find(p => p.id === id)
+
+  // Infinite line coordinate calculations
+  const getLineCoordinates = (p1, p2) => {
+    const dx = p2.x - p1.x
+    const dy = p2.y - p1.y
+    const len = Math.sqrt(dx * dx + dy * dy)
+    if (len === 0) return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y }
+    const ux = dx / len
+    const uy = dy / len
+    return {
+      x1: p1.x - ux * 1000,
+      y1: p1.y - uy * 1000,
+      x2: p2.x + ux * 1000,
+      y2: p2.y + uy * 1000
+    }
+  }
+
+  // Ray coordinate calculation (starts at p1, extends infinitely past p2)
+  const getRayCoordinates = (p1, p2) => {
+    const dx = p2.x - p1.x
+    const dy = p2.y - p1.y
+    const len = Math.sqrt(dx * dx + dy * dy)
+    if (len === 0) return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y }
+    const ux = dx / len
+    const uy = dy / len
+    return {
+      x1: p1.x,
+      y1: p1.y,
+      x2: p2.x + ux * 1000,
+      y2: p2.y + uy * 1000
+    }
+  }
+
+  const renderExampleIllustration = (chapterId, type) => {
+    const isCorrect = type === 'correct'
+    const strokeColor = isCorrect ? 'var(--clr-accent, #4caf50)' : 'var(--clr-error, #f44336)'
+    
+    return (
+      <svg width="100%" height="120" viewBox="0 0 100 100" style={{ display: 'block', margin: '0 auto' }}>
+        <rect width="100%" height="100%" fill="var(--clr-bg, #0f0f11)" rx="8" stroke="var(--clr-border, #333)" strokeWidth="1" />
+        
+        {chapterId === 1 && (
+          isCorrect ? (
+            <circle cx="50" cy="50" r="5" fill={strokeColor} />
+          ) : (
+            <circle cx="50" cy="50" r="18" fill="none" stroke={strokeColor} strokeWidth="10" strokeLinecap="round" opacity="0.5" />
+          )
+        )}
+
+        {chapterId === 2 && (
+          isCorrect ? (
+            <>
+              <line x1="15" y1="50" x2="85" y2="50" stroke={strokeColor} strokeWidth="3" />
+              <polygon points="15,50 25,45 25,55" fill={strokeColor} />
+              <polygon points="85,50 75,45 75,55" fill={strokeColor} />
+              <circle cx="35" cy="50" r="3.5" fill={strokeColor} />
+              <circle cx="65" cy="50" r="3.5" fill={strokeColor} />
+            </>
+          ) : (
+            <path d="M 15 50 Q 32.5 25, 50 50 T 85 50" fill="none" stroke={strokeColor} strokeWidth="3" />
+          )
+        )}
+
+        {chapterId === 3 && (
+          isCorrect ? (
+            <>
+              <line x1="25" y1="50" x2="75" y2="50" stroke={strokeColor} strokeWidth="3" />
+              <circle cx="25" cy="50" r="5" fill={strokeColor} />
+              <circle cx="75" cy="50" r="5" fill={strokeColor} />
+            </>
+          ) : (
+            <>
+              <line x1="25" y1="50" x2="75" y2="50" stroke={strokeColor} strokeWidth="3" />
+              <circle cx="25" cy="50" r="5" fill={strokeColor} />
+              <polygon points="75,50 65,45 65,55" fill={strokeColor} />
+            </>
+          )
+        )}
+
+        {chapterId === 4 && (
+          isCorrect ? (
+            <>
+              <line x1="25" y1="50" x2="75" y2="50" stroke={strokeColor} strokeWidth="3" />
+              <circle cx="25" cy="50" r="5" fill={strokeColor} />
+              <polygon points="75,50 65,45 65,55" fill={strokeColor} />
+            </>
+          ) : (
+            <>
+              <line x1="25" y1="50" x2="75" y2="50" stroke={strokeColor} strokeWidth="3" />
+            </>
+          )
+        )}
+
+        {chapterId === 5 && (
+          isCorrect ? (
+            <>
+              <line x1="35" y1="30" x2="35" y2="70" stroke={strokeColor} strokeWidth="3" />
+              <line x1="35" y1="70" x2="75" y2="70" stroke={strokeColor} strokeWidth="3" />
+              <rect x="35" y="60" width="10" height="10" fill="none" stroke={strokeColor} strokeWidth="1.5" />
+              <circle cx="35" cy="70" r="3.5" fill={strokeColor} />
+            </>
+          ) : (
+            <>
+              <line x1="25" y1="40" x2="75" y2="40" stroke={strokeColor} strokeWidth="3" />
+              <line x1="25" y1="60" x2="75" y2="60" stroke={strokeColor} strokeWidth="3" />
+            </>
+          )
+        )}
+
+        {chapterId === 6 && (
+          isCorrect ? (
+            <polygon points="30,70 50,30 70,70" fill="none" stroke={strokeColor} strokeWidth="3" />
+          ) : (
+            <path d="M 30 70 L 50 30 L 70 70" fill="none" stroke={strokeColor} strokeWidth="3" />
+          )
+        )}
+
+        {chapterId === 7 && (
+          isCorrect ? (
+            <polygon points="25,70 50,25 75,70" fill="none" stroke={strokeColor} strokeWidth="3" />
+          ) : (
+            <polygon points="30,30 70,30 70,70 30,70" fill="none" stroke={strokeColor} strokeWidth="3" />
+          )
+        )}
+
+        {chapterId === 8 && (
+          isCorrect ? (
+            <polygon points="20,35 80,35 80,65 20,65" fill="none" stroke={strokeColor} strokeWidth="3" />
+          ) : (
+            <polygon points="30,70 50,30 70,70" fill="none" stroke={strokeColor} strokeWidth="3" />
+          )
+        )}
+      </svg>
+    )
+  }
+
+  return (
+    <QuizLayout title="GeoCraft" subtitle="Let's learn geometry shape-by-shape!" onBack={handleBackToHome}>
+      <div className="geometry-workspace" style={{ fontFamily: 'var(--font-ui, "DM Sans", sans-serif)', color: 'var(--clr-text)', marginTop: '1rem' }}>
+        
+        {/* Horizontal Navigation Tracker */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          gap: '0.5rem', 
+          marginBottom: '2rem', 
+          flexWrap: 'wrap',
+          background: 'var(--clr-surface)',
+          padding: '12px',
+          borderRadius: '10px',
+          border: '1px solid var(--clr-border)'
+        }}>
+          {chapters.map((ch, idx) => {
+            const isCompleted = isChapterCompleted(ch.chapter_id)
+            const isActive = ch.chapter_id === currentChapterId
+            
+            return (
+              <Fragment key={ch.chapter_id}>
+                {idx > 0 && <span style={{ color: 'var(--clr-border, #444)', fontSize: '1rem', userSelect: 'none' }}>➔</span>}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentChapterId(ch.chapter_id)
+                    setCurrentActivityIndex(0)
+                  }}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    border: isActive 
+                      ? '2px solid var(--clr-accent, #4caf50)' 
+                      : (isCompleted ? '1px solid var(--clr-accent, #4caf50)' : '1px solid var(--clr-border, #444)'),
+                    background: isCompleted 
+                      ? 'var(--clr-accent, #4caf50)' 
+                      : (isActive ? 'rgba(76, 175, 80, 0.15)' : 'transparent'),
+                    color: isCompleted 
+                      ? '#fff' 
+                      : (isActive ? 'var(--clr-accent, #4caf50)' : 'var(--clr-text-soft, #aaa)'),
+                    fontSize: '0.95rem',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isActive ? '0 0 8px rgba(76, 175, 80, 0.3)' : 'none'
+                  }}
+                  title={ch.chapter_name}
+                >
+                  {isCompleted ? '✓' : ch.chapter_id}
+                </button>
+              </Fragment>
+            )
+          })}
+        </div>
+
+        {/* Syllabus Chapter details */}
+        <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+          <h2 style={{ marginTop: 0, fontSize: '1.35rem', borderBottom: '1px solid var(--clr-border, #444)', paddingBottom: '0.5rem' }}>
+            Chapter {currentChapter.chapter_id}: {currentChapter.chapter_name.split(' — ')[0].replace(/"/g, '')}
+          </h2>
+          <p style={{ fontSize: '1.05rem', lineHeight: '1.5', color: 'var(--clr-text-soft)', marginTop: '0.75rem' }}>
+            {currentChapter.definition}
+          </p>
+
+          {/* Example cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginTop: '1.5rem' }}>
+            {currentChapter.examples.map(ex => {
+              const isCorrect = ex.type === 'correct'
+              return (
+                <div key={ex.example_id} style={{
+                  background: 'var(--clr-surface, #1d1d21)',
+                  border: isCorrect ? '1px dashed var(--clr-accent, #4caf50)' : '1px dashed var(--clr-error, #f44336)',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem'
+                }}>
+                  <span style={{ 
+                    fontSize: '0.78rem', 
+                    fontWeight: 'bold', 
+                    color: isCorrect ? 'var(--clr-accent, #4caf50)' : 'var(--clr-error, #f44336)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    {isCorrect ? '✓ Correct Example' : '✗ Incorrect Example'}
+                  </span>
+                  
+                  {renderExampleIllustration(currentChapter.chapter_id, ex.type)}
+                  
+                  <strong style={{ fontSize: '0.95rem', marginTop: '0.25rem' }}>{ex.title}</strong>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--clr-text-soft)', lineHeight: '1.4' }}>
+                    {ex.description}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Active Challenge and drawing workspace */}
+        <div className="card" style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--clr-border, #444)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Active Challenge</h3>
+            <span style={{ fontSize: '0.82rem', background: 'var(--clr-border, #333)', padding: '2px 8px', borderRadius: '4px', color: 'var(--clr-text-soft)' }}>
+              Activity {currentActivityIndex + 1} of {currentChapter.activities.length}
+            </span>
+          </div>
+
+          <p style={{ fontSize: '1.1rem', color: 'var(--clr-text)', lineHeight: '1.5', margin: '0.5rem 0 1.25rem' }}>
+            <strong>Mascot:</strong> "{currentActivity.prompt}"
+          </p>
+
+          {/* Canvas Tools Toolbar */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '0.5rem', 
+            marginBottom: '0.75rem', 
+            background: 'var(--clr-surface, #1d1d21)',
+            padding: '8px',
+            borderRadius: '6px',
+            border: '1px solid var(--clr-border)',
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', marginRight: '0.5rem', color: 'var(--clr-text-soft)' }}>Drawing Tools:</span>
+            {currentActivity.allowed_tools.map(tool => {
+              const isActive = activeTool === tool
+              let label = tool.toUpperCase()
+              let icon = '✏️'
+              if (tool === 'point') { icon = '📍'; label = 'Point' }
+              else if (tool === 'line') { icon = '↔️'; label = 'Line' }
+              else if (tool === 'segment') { icon = '➖'; label = 'Segment' }
+              else if (tool === 'ray') { icon = '➡️'; label = 'Ray' }
+              
+              return (
+                <button
+                  key={tool}
+                  type="button"
+                  onClick={() => {
+                    setActiveTool(tool)
+                    setSelectedPoints([])
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: isActive ? '1px solid var(--clr-accent)' : '1px solid var(--clr-border)',
+                    background: isActive ? 'rgba(76, 175, 80, 0.15)' : 'transparent',
+                    color: isActive ? 'var(--clr-accent)' : 'var(--clr-text)',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>{icon}</span> {label}
+                </button>
+              )
+            })}
+            
+            <button
+              type="button"
+              onClick={() => {
+                setPoints([])
+                setSegments([])
+                setLines([])
+                setRays([])
+                setSelectedPoints([])
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '4px',
+                border: '1px solid var(--clr-border)',
+                background: 'transparent',
+                color: 'var(--clr-error, #f44336)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                marginLeft: 'auto'
+              }}
+            >
+              🧹 Clear Canvas
+            </button>
+          </div>
+
+          {/* Interactive SVG Canvas */}
+          <div style={{ position: 'relative', width: '100%', maxWidth: '500px', margin: '0 auto 1.5rem' }}>
+            <svg
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              width="100%"
+              height="300"
+              viewBox="0 0 500 300"
+              style={{
+                background: 'var(--clr-bg, #0f0f11)',
+                border: '1px solid var(--clr-border, #444)',
+                borderRadius: '8px',
+                cursor: 'crosshair',
+                display: 'block'
+              }}
+            >
+              <defs>
+                <pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--clr-border, #333)" strokeWidth="0.5" opacity="0.3" />
+                </pattern>
+                <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--clr-accent, #4caf50)" />
+                </marker>
+              </defs>
+              
+              {/* Grid Background */}
+              <rect width="500" height="300" fill="url(#canvas-grid)" />
+              
+              {/* Render Lines */}
+              {lines.map(line => {
+                const p1 = getPt(line.p1Id)
+                const p2 = getPt(line.p2Id)
+                if (!p1 || !p2) return null
+                const coords = getLineCoordinates(p1, p2)
+                return (
+                  <line
+                    key={line.id}
+                    x1={coords.x1}
+                    y1={coords.y1}
+                    x2={coords.x2}
+                    y2={coords.y2}
+                    stroke="var(--clr-accent, #4caf50)"
+                    strokeWidth="2.5"
+                    markerEnd="url(#arrow)"
+                    markerStart="url(#arrow)"
+                  />
+                )
+              })}
+
+              {/* Render Rays */}
+              {rays.map(ray => {
+                const p1 = getPt(ray.p1Id)
+                const p2 = getPt(ray.p2Id)
+                if (!p1 || !p2) return null
+                const coords = getRayCoordinates(p1, p2)
+                return (
+                  <line
+                    key={ray.id}
+                    x1={coords.x1}
+                    y1={coords.y1}
+                    x2={coords.x2}
+                    y2={coords.y2}
+                    stroke="var(--clr-accent, #4caf50)"
+                    strokeWidth="2.5"
+                    markerEnd="url(#arrow)"
+                  />
+                )
+              })}
+
+              {/* Render Segments */}
+              {segments.map(seg => {
+                const p1 = getPt(seg.p1Id)
+                const p2 = getPt(seg.p2Id)
+                if (!p1 || !p2) return null
+                return (
+                  <line
+                    key={seg.id}
+                    x1={p1.x}
+                    y1={p1.y}
+                    x2={p2.x}
+                    y2={p2.y}
+                    stroke="var(--clr-accent, #4caf50)"
+                    strokeWidth="2.5"
+                  />
+                )
+              })}
+
+              {/* Render Points */}
+              {points.map(pt => {
+                const isSelected = selectedPoints.includes(pt.id)
+                return (
+                  <g key={pt.id} style={{ cursor: 'pointer' }}>
+                    {isSelected && (
+                      <circle cx={pt.x} cy={pt.y} r="10" fill="var(--clr-accent, #4caf50)" opacity="0.3" />
+                    )}
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="5"
+                      fill="var(--clr-accent, #4caf50)"
+                      stroke="#fff"
+                      strokeWidth="1.5"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (activeTool !== 'point') {
+                          handlePointSelection(pt.id)
+                        }
+                      }}
+                    />
+                    <text
+                      x={pt.x + 8}
+                      y={pt.y - 8}
+                      fill="var(--clr-text, #fff)"
+                      fontSize="12"
+                      fontWeight="bold"
+                      style={{ userSelect: 'none' }}
+                    >
+                      {pt.id}
+                    </text>
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              {currentActivityIndex > 0 && (
+                <button 
+                  type="button"
+                  onClick={() => setCurrentActivityIndex(0)}
+                  className="back-button"
+                  style={{ float: 'none', margin: 0, padding: '6px 12px', fontSize: '0.85rem' }}
+                >
+                  ← Previous Activity
+                </button>
+              )}
+              
+              <button
+                type="button"
+                onClick={() => {
+                  const actId = currentActivity.activity_id
+                  let nextCompleted
+                  if (completedActivities.includes(actId)) {
+                    nextCompleted = completedActivities.filter(id => id !== actId)
+                  } else {
+                    nextCompleted = [...completedActivities, actId]
+                  }
+                  setCompletedActivities(nextCompleted)
+                  try {
+                    localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
+                  } catch {}
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  background: completedActivities.includes(currentActivity.activity_id) ? 'var(--clr-border, #333)' : 'var(--clr-accent, #4caf50)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: '600'
+                }}
+              >
+                {completedActivities.includes(currentActivity.activity_id) ? '✓ Completed (Undo)' : 'Mock Complete'}
+              </button>
+            </div>
+
+            <div>
+              {currentActivityIndex < currentChapter.activities.length - 1 ? (
+                <button 
+                  type="button"
+                  onClick={() => setCurrentActivityIndex(n => n + 1)}
+                  style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--clr-border, #333)', color: 'var(--clr-text)', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}
+                >
+                  Next Activity →
+                </button>
+              ) : (
+                currentChapterId < chapters.length && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setCurrentChapterId(id => id + 1)
+                      setCurrentActivityIndex(0)
+                    }}
+                    style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--clr-accent, #4caf50)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}
+                  >
+                    Next Chapter →
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </QuizLayout>
   )
 }
 
