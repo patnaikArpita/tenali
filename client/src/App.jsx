@@ -70,6 +70,7 @@ import VisualMathLabRedux, {
 } from './VisualMathLabRedux';
 import CoordinateGrid from './components/CoordinateGrid';
 import LanguageDashboard from './language/LanguageDashboard'
+import GeometryApp from './GeometryApp';
 
 // API base URL from environment variables (Vite)
 const API = import.meta.env.VITE_API_BASE_URL || '';
@@ -296,21 +297,6 @@ function AuthGate({ children }) {
   )
 }
 
-// Inject version badge into DOM once (appears on all routes)
-; (() => {
-  if (typeof document !== 'undefined' && !document.getElementById('tenali-version')) {
-    const el = document.createElement('div')
-    el.id = 'tenali-version'
-    Object.assign(el.style, {
-      position: 'fixed', top: '8px', right: '12px', zIndex: '9999',
-      fontSize: '0.65rem', opacity: '0.55', pointerEvents: 'none',
-      textAlign: 'right', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif',
-      color: 'var(--clr-text-soft)',
-    })
-    el.innerHTML = `<div>v${TENALI_VERSION}</div><div>${TENALI_BUILD_DATE}</div>`
-    document.body.appendChild(el)
-  }
-})()
 
 // Default number of questions for quizzes
 const DEFAULT_TOTAL = 20
@@ -40016,6 +40002,24 @@ function App() {
     )
   }
 
+  // Route: /geocraft → Kids Geometry Workspace
+  if (pathname === '/geocraft') {
+    return (
+      <>
+        <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+        <div className="app-shell">
+          <div className="card">
+            <AuthGate>
+              <GeometryApp onBack={() => { window.location.href = '/' }} />
+            </AuthGate>
+          </div>
+        </div>
+      </>
+    )
+  }
+
   if (pathname === '/gym') {
     return (<>
       <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>{theme === 'dark' ? '☀️' : '🌙'}</button>
@@ -41184,6 +41188,7 @@ function App() {
     lineqgym: LinEqGymApp,         // LinearEquations-Gym — solve linear equations (MCQ)
     indicesgym: IndicesGymApp,     // Indices-Gym — index laws (MCQ)
     polygym: PolyGymApp,           // Polynomials Gym — arithmetic → monomial algebra (MCQ)
+    geocraft: GeometryApp,
   }
 
   // Get the component to render (or null if mode not set)
@@ -41325,10 +41330,10 @@ function Home({ onSelect, isGoalSelection = false, onBack }) {
   const featuredApps = [
     { key: 'randommix', name: 'Random Mix', subtitle: 'Adaptive cross-topic quiz', color: 'featured' },
     { key: 'custom', name: 'Custom Lesson', subtitle: 'Build your own mixed quiz', color: 'featured' },
-    { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' },
+    { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' }
   ]
   // Visual Learning Universe lives only in the hamburger menu
-  const mathLabEntry = { key: 'math-lab', name: '🔬 Visual Learning Universe', subtitle: 'Visual, Mensuration & Addition labs', color: 'orange' }
+  const mathLabEntry = { key: 'math-lab', name: '🔬 Visual Learning Universe', subtitle: 'Visual, Mensuration, Addition & GeoCraft labs', color: 'orange' }
 
   // All regular quiz apps sorted alphabetically by name
   const regularApps = [
@@ -41620,7 +41625,6 @@ function Home({ onSelect, isGoalSelection = false, onBack }) {
           </button>
         ))}
       </div>
-      <div className="grid-dimension">{rows} × {cols}</div>
     </>
   )
 }
@@ -41636,6 +41640,7 @@ function MathLabHubApp({ onBack }) {
   const [stage, setStage] = useState('choose')
   const [difficulty, setDifficulty] = useState('easy')
   const [numQuestions, setNumQuestions] = useState('5')
+  const [directActive, setDirectActive] = useState(null)
 
   const labs = [
     {
@@ -41665,6 +41670,16 @@ function MathLabHubApp({ onBack }) {
       accentVar: 'var(--clr-accent)',
       accentAlpha: 'var(--clr-accent-soft)',
     },
+    {
+      key: 'geocraft',
+      icon: '📐',
+      name: 'GeoCraft',
+      subtitle: 'Geometry Constructions',
+      desc: 'Interactive geometry constructions: points, lines, angles, and circles',
+      accentVar: 'var(--clr-accent)',
+      accentAlpha: 'var(--clr-accent-soft)',
+      isDirect: true
+    },
   ]
 
   const selected = labs.find(lab => selectedActivities.includes(lab.key))
@@ -41680,8 +41695,16 @@ function MathLabHubApp({ onBack }) {
   }
 
   const chooseLab = (lab) => {
+    if (lab.isDirect) {
+      setDirectActive(lab.key)
+      return
+    }
     const labKey = lab.key
     setSelectedActivities(prev => prev.includes(labKey) ? prev.filter((item) => item !== labKey) : [...prev, labKey])
+  }
+
+  if (directActive === 'geocraft') {
+    return <GeometryApp onBack={() => setDirectActive(null)} />
   }
 
   const mapAdditionDifficulty = (difficulty) => {
