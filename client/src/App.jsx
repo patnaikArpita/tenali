@@ -52478,13 +52478,13 @@ function GeometryApp({ onBack }) {
     if (currentActivity) {
       if (currentActivity.activity_id === 'act_3_1') {
         initialPoints = [
-          { id: 'A', x: 140, y: 150, color: '#4caf50', isPreplaced: true }, // Green
-          { id: 'B', x: 360, y: 150, color: '#f44336', isPreplaced: true }  // Red
+          { id: 'A', x: 240, y: 400, color: '#4caf50', isPreplaced: true }, // Green
+          { id: 'B', x: 560, y: 400, color: '#f44336', isPreplaced: true }  // Red
         ]
       } else if (currentActivity.activity_id === 'act_4_1') {
         initialPoints = [
-          { id: 'A', x: 160, y: 150, color: '#4caf50', isPreplaced: true }, // Green
-          { id: 'B', x: 320, y: 150, color: '#ff9800', isPreplaced: true }  // Orange
+          { id: 'A', x: 240, y: 400, color: '#4caf50', isPreplaced: true }, // Green
+          { id: 'B', x: 480, y: 400, color: '#ff9800', isPreplaced: true }  // Orange
         ]
       }
     }
@@ -52518,14 +52518,14 @@ function GeometryApp({ onBack }) {
     const rawX = e.clientX - rect.left
     const rawY = e.clientY - rect.top
     
-    // Snap to grid (grid spacing 10px)
-    const gridSpacing = 10
+    // Snap to grid (grid spacing 40px)
+    const gridSpacing = 40
     const snapX = Math.round(rawX / gridSpacing) * gridSpacing
     const snapY = Math.round(rawY / gridSpacing) * gridSpacing
     
-    // Boundary checks (500x300 canvas size)
-    const x = Math.max(0, Math.min(500, snapX))
-    const y = Math.max(0, Math.min(300, snapY))
+    // Boundary checks (800x800 canvas size)
+    const x = Math.max(0, Math.min(800, snapX))
+    const y = Math.max(0, Math.min(800, snapY))
     
     const existingPoint = points.find(p => Math.hypot(p.x - rawX, p.y - rawY) < 15)
     
@@ -52832,7 +52832,7 @@ function GeometryApp({ onBack }) {
         feedback = { status: 'error', message: 'We need exactly one point placed on the target center.' }
       } else {
         const pt = points[0]
-        if (Math.hypot(pt.x - 250, pt.y - 150) >= 5) {
+        if (Math.hypot(pt.x - 400, pt.y - 400) >= 10) {
           feedback = { status: 'error', message: 'Make sure your point is close to the center of the target screen.' }
         } else {
           feedback = { status: 'success', message: 'Perfect hit! You placed a point right on the target center!' }
@@ -52906,8 +52906,8 @@ function GeometryApp({ onBack }) {
           const dy = Math.abs(p1.y - p2.y)
           if (dy > 2) {
             feedback = { status: 'error', message: 'Your segment must be perfectly horizontal (flat).' }
-          } else if (Math.abs(dx - 80) > 4) {
-            feedback = { status: 'error', message: 'Your segment length is incorrect. Measure it with the ruler to make it exactly 4 units (80 pixels).' }
+          } else if (Math.abs(dx - 160) > 8) {
+            feedback = { status: 'error', message: 'Your segment length is incorrect. Measure it with the ruler to make it exactly 4 units (160 pixels).' }
           } else {
             feedback = { status: 'success', message: 'Perfect! You drew a horizontal segment exactly 4 units long.' }
           }
@@ -53473,13 +53473,13 @@ function GeometryApp({ onBack }) {
                 if (currentActivity) {
                   if (currentActivity.activity_id === 'act_3_1') {
                     initialPoints = [
-                      { id: 'A', x: 140, y: 150, color: '#4caf50', isPreplaced: true },
-                      { id: 'B', x: 360, y: 150, color: '#f44336', isPreplaced: true }
+                      { id: 'A', x: 240, y: 400, color: '#4caf50', isPreplaced: true },
+                      { id: 'B', x: 560, y: 400, color: '#f44336', isPreplaced: true }
                     ]
                   } else if (currentActivity.activity_id === 'act_4_1') {
                     initialPoints = [
-                      { id: 'A', x: 160, y: 150, color: '#4caf50', isPreplaced: true },
-                      { id: 'B', x: 320, y: 150, color: '#ff9800', isPreplaced: true }
+                      { id: 'A', x: 240, y: 400, color: '#4caf50', isPreplaced: true },
+                      { id: 'B', x: 480, y: 400, color: '#ff9800', isPreplaced: true }
                     ]
                   }
                 }
@@ -53508,15 +53508,15 @@ function GeometryApp({ onBack }) {
           </div>
 
           {/* Interactive SVG Canvas */}
-          <div style={{ position: 'relative', width: '100%', maxWidth: '500px', margin: '0 auto 1.5rem' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
             <svg
               ref={canvasRef}
               onClick={handleCanvasClick}
               width="100%"
-              height="300"
-              viewBox="0 0 500 300"
+              height="800"
+              viewBox="0 0 800 800"
               style={{
-                background: 'var(--clr-bg, #0f0f11)',
+                background: '#4e433c',
                 border: '1px solid var(--clr-border, #444)',
                 borderRadius: '8px',
                 cursor: 'crosshair',
@@ -53524,8 +53524,8 @@ function GeometryApp({ onBack }) {
               }}
             >
               <defs>
-                <pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--clr-border, #333)" strokeWidth="0.5" opacity="0.3" />
+                <pattern id="canvas-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffee58" strokeWidth="0.5" opacity="0.15" />
                 </pattern>
                 <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                   <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--clr-accent, #4caf50)" />
@@ -53533,27 +53533,27 @@ function GeometryApp({ onBack }) {
               </defs>
               
               {/* Grid Background */}
-              <rect width="500" height="300" fill="url(#canvas-grid)" />
+              <rect width="800" height="800" fill="url(#canvas-grid)" />
               
               {/* Custom background visual aids */}
               {currentActivity && currentActivity.activity_id === 'act_1_1' && (
                 <g opacity="0.3">
-                  <circle cx="250" cy="150" r="60" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
-                  <circle cx="250" cy="150" r="40" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
-                  <circle cx="250" cy="150" r="20" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" />
-                  <circle cx="250" cy="150" r="4" fill="var(--clr-accent, #4caf50)" />
+                  <circle cx="400" cy="400" r="120" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
+                  <circle cx="400" cy="400" r="80" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" strokeDasharray="4 4" />
+                  <circle cx="400" cy="400" r="40" fill="none" stroke="var(--clr-accent, #4caf50)" strokeWidth="2" />
+                  <circle cx="400" cy="400" r="4" fill="var(--clr-accent, #4caf50)" />
                 </g>
               )}
               {currentActivity && currentActivity.activity_id === 'act_3_1' && (
                 <g opacity="0.3">
                   {/* Island A */}
-                  <circle cx="140" cy="150" r="40" fill="#4caf50" />
-                  <circle cx="130" cy="140" r="25" fill="#8bc34a" />
+                  <circle cx="240" cy="400" r="60" fill="#4caf50" />
+                  <circle cx="225" cy="385" r="35" fill="#8bc34a" />
                   {/* Island B */}
-                  <circle cx="360" cy="150" r="40" fill="#f44336" />
-                  <circle cx="370" cy="160" r="25" fill="#ff5722" />
-                  <text x="140" y="90" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island A</text>
-                  <text x="360" y="90" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island B</text>
+                  <circle cx="560" cy="400" r="60" fill="#f44336" />
+                  <circle cx="575" cy="415" r="35" fill="#ff5722" />
+                  <text x="240" y="320" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island A</text>
+                  <text x="560" y="320" textAnchor="middle" fill="var(--clr-text)" fontSize="11" fontWeight="bold">Island B</text>
                 </g>
               )}
               
@@ -53659,7 +53659,7 @@ function GeometryApp({ onBack }) {
                 const p2 = getPt(seg.p2Id)
                 if (!p1 || !p2) return null
                 const distPx = Math.hypot(p2.x - p1.x, p2.y - p1.y)
-                const distGrid = distPx / 20
+                const distGrid = distPx / 40
                 const midX = (p1.x + p2.x) / 2
                 const midY = (p1.y + p2.y) / 2
                 const dx = p2.x - p1.x
