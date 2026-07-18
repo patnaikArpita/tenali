@@ -109,6 +109,55 @@ h1 {
   letter-spacing: 0.01em;
 }
 
+/* ── Title + Hint Row (used in GeoCraft) ─────────────── */
+.quiz-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.quiz-title-inline {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5vw, 3.2rem);
+  font-weight: 700;
+  color: var(--clr-text);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.quiz-title-hint {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--clr-text-soft);
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  border-left: 2px solid var(--clr-accent, #e07a3a);
+  padding-left: 0.75rem;
+  max-width: 220px;
+  opacity: 0.85;
+}
+
+@media (max-width: 560px) {
+  .quiz-title-row {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .quiz-title-hint {
+    border-left: none;
+    padding-left: 0;
+    text-align: center;
+    max-width: 100%;
+    border-top: 1px solid var(--clr-border);
+    padding-top: 0.4rem;
+  }
+}
+
+
 /* ── Search Bar ─────────────────────────────────────── */
 .search-bar-row {
   display: flex;

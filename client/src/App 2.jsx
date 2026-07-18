@@ -4315,13 +4315,20 @@ function ExtendedEuclidApp() {
   )
 }
 
-function QuizLayout({ title, subtitle, onBack, children }) {
+function QuizLayout({ title, subtitle, onBack, children, titleHint }) {
   return (
     <>
       <div className="header-row">
         <button className="back-button" onClick={onBack}>← Home</button>
       </div>
-      <h1>{title}</h1>
+      {titleHint ? (
+        <div className="quiz-title-row">
+          <h1 className="quiz-title-inline">{title}</h1>
+          <span className="quiz-title-hint">{titleHint}</span>
+        </div>
+      ) : (
+        <h1>{title}</h1>
+      )}
       <p className="subtitle">{subtitle}</p>
       {children}
     </>
