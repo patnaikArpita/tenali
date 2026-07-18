@@ -25,6 +25,15 @@ import App, { AuthMenu } from './App.jsx?v=2'
 import './index.css';
 import './kid-zone.css';
 
+// Fix: Reset scroll position on every page navigation.
+// Browsers restore the previous page's scroll position by default during full-page
+// navigations (window.location.href). Disabling scrollRestoration and explicitly
+// scrolling to top ensures every page opens from the top.
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+window.scrollTo(0, 0);
+
 // Create React root and render the App component
 ReactDOM.createRoot(document.getElementById('root')).render(
   // StrictMode: Enables additional development checks and warnings
