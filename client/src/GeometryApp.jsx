@@ -226,6 +226,7 @@ export default function GeometryApp({ onBack }) {
     } else {
       setActiveTool('point')
     }
+    window.scrollTo(0, 0)
   }, [currentChapterId, currentActivityIndex])
 
   const isChapterCompleted = (chId) => {
