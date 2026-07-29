@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, Fragment } from 'react
 import geometryData from './geometry.json';
 
 // Local helper component to avoid circular dependencies
+
 function QuizLayout({ title, subtitle, onBack, children }) {
   const [showInfo, setShowInfo] = useState(false);
 
@@ -98,6 +99,7 @@ function QuizLayout({ title, subtitle, onBack, children }) {
             </div>
           )}
         </div>
+
       </div>
       <h1 style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.4rem)' }}>{title}</h1>
       {children}
@@ -192,6 +194,12 @@ export default function GeometryApp({ onBack }) {
   const [selectedOption, setSelectedOption] = useState(null)
   const [showHint, setShowHint] = useState(false)
 
+
+  // Scroll window to top when chapter changes
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [currentChapterId])
+
   // Reset drawing canvas and default the active tool when activity or chapter changes
   useEffect(() => {
     let initialPoints = []
@@ -209,6 +217,10 @@ export default function GeometryApp({ onBack }) {
       }
     }
     
+
+
+     
+
     setPoints(initialPoints)
     setSegments([])
     setLines([])
@@ -226,7 +238,11 @@ export default function GeometryApp({ onBack }) {
     } else {
       setActiveTool('point')
     }
+
     window.scrollTo(0, 0)
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [currentChapterId, currentActivityIndex])
 
   const isChapterCompleted = (chId) => {
@@ -862,7 +878,11 @@ export default function GeometryApp({ onBack }) {
         setCompletedActivities(nextCompleted)
         try {
           localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
+
         } catch {}
+
+        }  
+
       }
     }
   }
@@ -1776,4 +1796,3 @@ export default function GeometryApp({ onBack }) {
       </div>
     </QuizLayout>
   )
-}
