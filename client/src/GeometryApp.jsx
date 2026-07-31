@@ -880,13 +880,9 @@ export default function GeometryApp({ onBack }) {
           localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
 
         } catch {}
-
-        }  
-
       }
     }
   }
-
   const renderExampleIllustration = (chapterId, type) => {
     const isCorrect = type === 'correct'
     const strokeColor = isCorrect ? 'var(--clr-accent, #4caf50)' : 'var(--clr-error, #f44336)'
@@ -1796,3 +1792,4 @@ export default function GeometryApp({ onBack }) {
       </div>
     </QuizLayout>
   )
+}
