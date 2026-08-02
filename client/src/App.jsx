@@ -23,7 +23,8 @@
 
 
 
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo,Fragment, useCallback } from 'react';
+import GeometryApp from './GeometryApp';
 import VoiceAssistant from './components/VoiceAssistant';
 import { motion } from 'framer-motion';
 import OnboardingTour from './components/OnboardingTour';
@@ -65,7 +66,6 @@ function useProgressSubmit(revealed, isCorrect, topic, questionId) {
   }, [revealed, isCorrect, topic, questionId]);
 }
 
-
 import Vachana from './vachana'
 import 'chart.js/auto'
 import { Line } from 'react-chartjs-2'
@@ -104,7 +104,6 @@ import SimulConceptApp from './lib/simul-concept/SimulConceptApp.jsx';
 import DiagnosticQuiz from './lib/DiagnosticQuiz.jsx';
 import { useI18n } from './lib/i18n.jsx';
 import CuriosityApp from './Curiosity.jsx';
-import GeometryApp from './GeometryApp';
 
 // API base URL from environment variables (Vite)
 const API = import.meta.env.VITE_API_BASE_URL || '';
@@ -442,6 +441,14 @@ function AuthGate({ children }) {
     </div>
   )
 }
+
+
+// Version badge removed. Clean up if existing.
+if (typeof document !== 'undefined') {
+  const el = document.getElementById('tenali-version')
+  if (el) el.remove()
+}
+ 
 
 // Default number of questions for quizzes
 const DEFAULT_TOTAL = 20
@@ -42957,6 +42964,18 @@ function App() {
     )
   }
 
+  // Route: /geocraft → Kids Geometry Workspace
+  if (pathname === '/geocraft') {
+    return (
+      <>
+        <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+        <GeometryApp onBack={() => { window.location.href = '/' }} />
+      </>
+    )
+  }
+
   // Route: /tenth → Cambridge IGCSE index page (links to all 24 chapters)
   if (pathname === '/tenth') {
     return (
@@ -42979,6 +42998,24 @@ function App() {
         <div className="app-shell">
           <div className="card">
             <GeometryApp onBack={() => { window.location.href = withBase('/') }} />
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // Route: /geocraft → Kids Geometry Workspace
+  if (pathname === '/geocraft') {
+    return (
+      <>
+        <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+        <div className="app-shell">
+          <div className="card">
+            <AuthGate>
+              <GeometryApp onBack={() => { window.location.href = '/' }} />
+            </AuthGate>
           </div>
         </div>
       </>
@@ -44738,6 +44775,9 @@ function App() {
     lineqgym: LinEqGymApp,         // LinearEquations-Gym — solve linear equations (MCQ)
     indicesgym: IndicesGymApp,     // Indices-Gym — index laws (MCQ)
     polygym: PolyGymApp,           // Polynomials Gym — arithmetic → monomial algebra (MCQ)
+
+    geocraft: GeometryApp,
+
     riddle: RiddleApp,              // Math Riddles
     trackProgress: null,
   }
@@ -44909,6 +44949,8 @@ function App() {
  * @param {Object} props
  * @param {Function} props.onSelect - Callback when user selects a quiz: receives mode key (e.g., 'gk')
  */
+
+  // Special featured apps (shown in highlighted first row & three-line menu)
 function Home({ onSelect, completedTopics = [], goldMastery = [], coins = 0, isGoalSelection = false, onBack }) {
   const [showAbout, setShowAbout] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -44917,10 +44959,16 @@ function Home({ onSelect, completedTopics = [], goldMastery = [], coins = 0, isG
     { key: 'randommix', name: 'Random Mix', subtitle: 'Adaptive cross-topic quiz', color: 'featured' },
     { key: 'custom', name: 'Custom Lesson', subtitle: 'Build your own mixed quiz', color: 'featured' },
     { key: 'gym', name: 'Gym', subtitle: 'Adaptive workout across all 7 gym puzzles', color: 'featured' },
+
+    { key: 'geocraft', name: 'GeoCraft', subtitle: 'Interactive geometry constructions: points, lines, angles', color: 'featured' },
+
     { key: 'vachana', name: 'Vachana', subtitle: 'Mathematical Literacy Lab', color: 'featured' },
   ]
+  
   // Visual Learning Universe lives only in the hamburger menu
-  const mathLabEntry = { key: 'math-lab', name: '🔬 Visual Learning Universe', subtitle: 'Visual, Mensuration & Addition labs', color: 'orange' }
+
+  const mathLabEntry = { key: 'math-lab', name: '🔬 Visual Learning Universe', subtitle: 'Visual, Mensuration, Addition & GeoCraft labs', color: 'orange' }
+
   const geocraftEntry = { key: 'geocraft', name: '📐 GeoCraft', subtitle: 'Interactive Geometry Lab', color: 'featured', isRedirect: true, path: '/geocraft' }
 
   const hamburgerApps = [
@@ -45021,26 +45069,26 @@ function Home({ onSelect, completedTopics = [], goldMastery = [], coins = 0, isG
     { key: 'polygym', name: 'Polynomials Gym', subtitle: 'Arithmetic → monomial algebra (MCQ)', color: 'blue' },
   ]
 
+
   // Combined list for search filtering
   const allApps = [...hamburgerApps, ...regularApps]
 
   // Hamburger menu open state
+
   const menuRef = useRef(null)
 
-  // Close menu when clicking outside
+  // Handle click outside to close hamburger menu
   useEffect(() => {
+
     if (!menuOpen) return
     const handleClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [menuOpen])
 
-  // Search term for filtering apps
-
   // Filtered lists
   const isSearching = search.trim() !== ''
   const matchFilter = (a) => a.name.toLowerCase().includes(search.toLowerCase()) || a.subtitle.toLowerCase().includes(search.toLowerCase())
-  
   // Under Goal Practice mode, we include Random Mix & Custom Lesson at the top of the grid list (omitting Gym since it does not support goals)
   const goalFeatured = [
     { key: 'randommix', name: 'Random Mix', subtitle: 'Adaptive cross-topic quiz', color: 'featured' },
@@ -45261,7 +45309,6 @@ function Home({ onSelect, completedTopics = [], goldMastery = [], coins = 0, isG
           )
         })}
       </div>
-      <div className="grid-dimension">{rows} × {cols}</div>
     </>
   )
 }
@@ -45979,6 +46026,7 @@ function MathLabHubApp({ onBack }) {
   const [stage, setStage] = useState('choose')
   const [difficulty, setDifficulty] = useState('easy')
   const [numQuestions, setNumQuestions] = useState('5')
+  const [directActive, setDirectActive] = useState(null)
 
   const labs = [
     {
@@ -46008,6 +46056,16 @@ function MathLabHubApp({ onBack }) {
       accentVar: 'var(--clr-accent)',
       accentAlpha: 'var(--clr-accent-soft)',
     },
+    {
+      key: 'geocraft',
+      icon: '📐',
+      name: 'GeoCraft',
+      subtitle: 'Geometry Constructions',
+      desc: 'Interactive geometry constructions: points, lines, angles, and circles',
+      accentVar: 'var(--clr-accent)',
+      accentAlpha: 'var(--clr-accent-soft)',
+      isDirect: true
+    },
   ]
 
   const selected = labs.find(lab => selectedActivities.includes(lab.key))
@@ -46023,8 +46081,16 @@ function MathLabHubApp({ onBack }) {
   }
 
   const chooseLab = (lab) => {
+    if (lab.isDirect) {
+      setDirectActive(lab.key)
+      return
+    }
     const labKey = lab.key
     setSelectedActivities(prev => prev.includes(labKey) ? prev.filter((item) => item !== labKey) : [...prev, labKey])
+  }
+
+  if (directActive === 'geocraft') {
+    return <GeometryApp onBack={() => setDirectActive(null)} />
   }
 
   const mapAdditionDifficulty = (difficulty) => {
@@ -68643,6 +68709,14 @@ function LearningJourneyCheckpointQuizView({ topicId, onBack }) {
     </div>
   );
 }
+
+import geometryData from './geometry.json'
+
+/* ── Geometry Learning Game (GeoCraft) ────────────── */
+/**
+ * GeometryApp Component
+ * A simple, interactive geometry game tailored for children (ages 10-12).
+ */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProgressTrackerApp — Gym Quiz History Visualization

@@ -28,6 +28,15 @@ import './kid-zone.css';
 import { I18nProvider } from './lib/i18n.jsx';
 import { AccessibilityProvider } from './lib/AccessibilityProvider.jsx';
 
+// Fix: Reset scroll position on every page navigation.
+// Browsers restore the previous page's scroll position by default during full-page
+// navigations (window.location.href). Disabling scrollRestoration and explicitly
+// scrolling to top ensures every page opens from the top.
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+window.scrollTo(0, 0);
+
 // Create React root and render the App component
 ReactDOM.createRoot(document.getElementById('root')).render(
   // StrictMode: Enables additional development checks and warnings

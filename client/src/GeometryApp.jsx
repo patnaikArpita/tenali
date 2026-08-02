@@ -2,11 +2,104 @@ import React, { useState, useEffect, useRef, useCallback, Fragment } from 'react
 import geometryData from './geometry.json';
 
 // Local helper component to avoid circular dependencies
-function QuizLayout({ title, subtitle: _subtitle, onBack, children }) {
+
+function QuizLayout({ title, subtitle, onBack, children }) {
+  const [showInfo, setShowInfo] = useState(false);
+
+  const infoItems = [
+    { icon: '📚', text: 'Each chapter has 2 activities to complete.' },
+    { icon: '✅', text: 'You must complete the current activity before moving to the next one.' },
+    { icon: '🔓', text: 'Chapters are unlocked in order — finish a chapter to unlock the next.' },
+    { icon: '🖊️', text: 'Use the drawing tools (point, segment, line, ray) and measure tools (ruler, angle) to complete each task.' },
+  ];
+
   return (
     <>
-      <div className="header-row">
+      <div className="header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button className="back-button" onClick={onBack}>← Home</button>
+
+        {/* ⓘ Info icon with dropdown tooltip */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onMouseEnter={() => setShowInfo(true)}
+            onMouseLeave={() => setShowInfo(false)}
+            onClick={() => setShowInfo(v => !v)}
+            title="How GeoCraft works"
+            style={{
+              background: showInfo ? 'rgba(224,122,58,0.12)' : 'transparent',
+              border: `1.5px solid ${showInfo ? 'var(--clr-accent, #e07a3a)' : 'var(--clr-border, #555)'}`,
+              borderRadius: '50%',
+              width: '30px',
+              height: '30px',
+              cursor: 'pointer',
+              color: showInfo ? 'var(--clr-accent, #e07a3a)' : 'var(--clr-text-soft, #aaa)',
+              fontSize: '0.95rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'border-color 0.2s, color 0.2s, background 0.2s',
+              lineHeight: 1,
+            }}
+            onFocus={() => setShowInfo(true)}
+            onBlur={() => setShowInfo(false)}
+          >
+            ⓘ
+          </button>
+
+          {showInfo && (
+            <div
+              onMouseEnter={() => setShowInfo(true)}
+              onMouseLeave={() => setShowInfo(false)}
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: '40px',
+                width: '380px',
+                background: 'var(--clr-card, #242424)',
+                border: '1px solid var(--clr-border, #3a3a3a)',
+                borderTop: '3px solid var(--clr-accent, #e07a3a)',
+                borderRadius: '12px',
+                padding: '18px 20px 16px',
+                zIndex: 300,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
+              }}
+            >
+              {/* Card title */}
+              <div style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--clr-accent, #e07a3a)',
+                marginBottom: '14px',
+              }}>
+                How it works
+              </div>
+
+              {/* Bullet rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {infoItems.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <span style={{
+                      fontSize: '1rem',
+                      lineHeight: 1,
+                      marginTop: '2px',
+                      flexShrink: 0,
+                    }}>{item.icon}</span>
+                    <span style={{
+                      fontSize: '0.84rem',
+                      fontWeight: 400,
+                      color: 'var(--clr-text, #e8e8e8)',
+                      lineHeight: 1.6,
+                    }}>{item.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
       <h1 style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.4rem)' }}>{title}</h1>
       {children}
@@ -101,6 +194,7 @@ export default function GeometryApp({ onBack }) {
   const [selectedOption, setSelectedOption] = useState(null)
   const [showHint, setShowHint] = useState(false)
 
+
   // Scroll window to top when chapter changes
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -123,7 +217,10 @@ export default function GeometryApp({ onBack }) {
       }
     }
     
+
+
      
+
     setPoints(initialPoints)
     setSegments([])
     setLines([])
@@ -141,7 +238,11 @@ export default function GeometryApp({ onBack }) {
     } else {
       setActiveTool('point')
     }
+
+    window.scrollTo(0, 0)
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [currentChapterId, currentActivityIndex])
 
   const isChapterCompleted = (chId) => {
@@ -777,11 +878,11 @@ export default function GeometryApp({ onBack }) {
         setCompletedActivities(nextCompleted)
         try {
           localStorage.setItem('tenali-geometry-completed', JSON.stringify(nextCompleted))
-        } catch { /* ignored */ }
+
+        } catch {}
       }
     }
   }
-
   const renderExampleIllustration = (chapterId, type) => {
     const isCorrect = type === 'correct'
     const strokeColor = isCorrect ? 'var(--clr-accent, #4caf50)' : 'var(--clr-error, #f44336)'
